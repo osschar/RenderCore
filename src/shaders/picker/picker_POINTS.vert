@@ -19,6 +19,10 @@ in mat4 MMat;
 #fi
 in vec3 VPos;       // Vertex position
 
+#if (PICK_MODE_UINT_PRIM)
+in uint PrimitiveIDin;
+flat out uint PrimitiveID;
+#fi
 
 //MAIN
 //**********************************************************************************************************************
@@ -47,4 +51,8 @@ void main() {
         gl_PointSize = pointSize;
     #fi
     if(gl_PointSize < 1.0) gl_PointSize = 1.0;
+
+    #if (PICK_MODE_UINT_PRIM)
+    PrimitiveID = PrimitiveIDin;
+    #fi
 }

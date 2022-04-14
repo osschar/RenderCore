@@ -18,6 +18,10 @@ in mat4 MMat;
 #fi
 in vec3 VPos;       // Vertex position
 
+#if (PICK_MODE_UINT_PRIM)
+in uint PrimitiveIDin;
+flat out uint PrimitiveID;
+#fi
 
 //MAIN
 //**********************************************************************************************************************
@@ -30,5 +34,9 @@ void main() {
     #if (INSTANCED)
     //gl_Position = PMat * VMat * MMat * vec4(VPos, 1.0);
     gl_Position = PMat * MVMat * MMat * vec4(VPos, 1.0);
+    #fi
+
+    #if (PICK_MODE_UINT_PRIM)
+    PrimitiveID = PrimitiveIDin;
     #fi
 }

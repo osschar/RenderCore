@@ -21,6 +21,9 @@ import {OutlineBasicMaterial} from "../materials/OutlineBasicMaterial.js";
 import {RenderArrayManager} from './RenderArrayManager.js';
 import {Vector4} from '../math/Vector4.js';
 
+import {PickingShaderMaterial} from '../materials/PickingShaderMaterial.js';
+import {BufferAttribute} from '../core/BufferAttribute.js';
+
 
 export class MeshRenderer extends Renderer {
 
@@ -66,6 +69,7 @@ export class MeshRenderer extends Renderer {
 
 		//picking
 		this._pickEnabled = false;
+		this._pickSecondaryEnabled = false;
 		this._pickDoNotRender = false; // If true, exit render() after picking.
 		this._pickObject3D = false; // Use internal IDs to select Mesh that was picked. When false, user must set pickID.
 		this._pickCoordinateX = 0;
@@ -124,7 +128,7 @@ export class MeshRenderer extends Renderer {
 			console.log("COMPILED: " + this._compiledPrograms + " length: " + this._compiledPrograms.size);
 			console.log(this._compiledPrograms);
 			console.log("--------------------------------------");
-
+			this.used = false;
 			return;
 		}
 		if(!this.used) {
@@ -148,6 +152,9 @@ export class MeshRenderer extends Renderer {
 			this._renderPickingObjects(this._renderArrayManager.opaqueObjects, this._renderArrayManager.transparentObjects, this._renderArrayManager.opaqueObjectsWithOutline, this._renderArrayManager.transparentObjectsWithOutline, camera);
 			if (this._pickDoNotRender)
 				return;
+		} else if(this._pickSecondaryEnabled) {
+			this.renderForSecondaryPick(this._pickedObject3D, camera);
+			return;
 		}
 
 		// Render opaque objects
@@ -486,6 +493,10 @@ export class MeshRenderer extends Renderer {
 					}
 					buffer = this._glManager.getAttributeBuffer(MMat);
 					attributeSetter["MMat"].set(buffer, 16, object.instanced, MMat.divisor);
+					break;
+				case "PrimitiveIDin":
+					// special case, handled in renderForSecondaryPick()
+					// just avoiding error below.
 					break;
 				default:
 					let found = false;
@@ -1264,5 +1275,75 @@ export class MeshRenderer extends Renderer {
 		this._pickCoordinateX = x;
 		this._pickCoordinateY = y;
 		this._pickCallback = callback;
+	}
+
+	/**
+	 * Perform second level selection -- detect primitive id of previously picked object.
+	 * Assumes rendering for picking was the previous operation so all setup is already done.
+	 *
+	 * @param object Object to be rendered with per primitive ID indexing
+	 */
+	renderForSecondaryPick(object, camera) {
+		this._pickSecondaryEnabled = false;
+
+		console.log("MOO?");
+
+		// GL prelminaries, clear etc
+		// Default background can be other than black - we need it black here.
+		// Plus we need these special clear calls for uint color buffer.
+		this._gl.clearBufferuiv(this._gl.COLOR, 0, new Uint32Array([0, 0, 0, 0]));
+		this._gl.clearBufferfi(this._gl.DEPTH_STENCIL, 0, 1.0, 0);
+
+		// Inject new attribute, PICK_PRIMITIVE flag (also to enfore recompilation)
+		// Could one have this program kept separately?
+		// Trying to set it in ren-de-q-tor - yup, this seems to work - why?
+		// object.pickingMaterial.pickMode = PickingShaderMaterial.PICK_MODE.UINT_PRIM;
+
+		// Bind iota uint array.
+		// How do I know number of primitives? Divisor (N_verts per primitve)?
+		// See Mesh.js draw() ... hmmh
+		if (!this._pickPrimBuffAttr) {
+			let arr = new Uint32Array(1024);
+			for (let i = 0; i < 1024; ++i) arr[i] = i + 1;
+			this._pickPrimBuffAttr = new BufferAttribute(arr, 1);
+			this._glManager.updateBufferAttribute(this._pickPrimBuffAttr, false);
+		} else {
+			// XXX check resize? how to update buffere address?
+			// Could, potentially, also render in, say, 4096-primitive chunks.
+		}
+
+		//SET PROGRAM
+		let program_id = object.pickingMaterial.requiredProgram(this).programID;
+		this._setupProgram(object, camera, program_id);
+
+		let buffer = this._glManager.getAttributeBuffer(this._pickPrimBuffAttr);
+		// XXX Hardocding stride to 1 ... need to extract primitive size.
+		// XXX Also, need to lieinstanced=true so divisor gets set, see GLProgramManager._initAttributeSetter
+		// Added 5th argument - uint32 -- don;t know how to check otherwise.
+		// HMMMH ... divisor only applies to gl.drawArraysInstanced() and gl.drawElementsInstanced() ??? :(
+		// Could it work any way? Do I need to clone ID N_verts_in_primitive?	               true, 1
+		this._compiledPrograms.get(program_id).attributeSetter["PrimitiveIDin"].set(buffer, 1, false, 0, true);
+
+		this._setup_material_side(object.material.side);
+		this._setup_material_depth(true, object.material.depthFunc, true);
+
+		// let program = this._compiledPrograms.get(program_id)
+
+		// this._glManager._attributeManager.updateAttribute(this._pickPrimBuffAttr, this._glManager._gl.ARRAY_BUFFER);
+
+		console.log("FOO?");
+
+		// Draw
+		this._drawObject(object);
+
+		// Now extract the value, as for regular uint picking (again, subtract 1 from id)
+		{
+			console.log("BAR?");
+
+			let r = new Uint32Array(1);
+			this._gl.readPixels(this._pickCoordinateX, this._canvas.height - this._pickCoordinateY, 1, 1, this._gl.RED_INTEGER, this._gl.UNSIGNED_INT, r);
+			let secPickId = r[0];
+			console.log("MeshRenderer secondaryPickID:", secPickId);
+		}
 	}
 }

@@ -17,6 +17,10 @@ layout(location = 0) out vec4 objectID;
 #if(PICK_MODE_UINT)
 layout(location = 0) out uint objectID;
 #fi
+#if(PICK_MODE_UINT_PRIM)
+flat in uint PrimitiveID;
+layout(location = 0) out uint PrimitiveIDout;
+#fi
 
 
 //MAIN
@@ -27,5 +31,8 @@ void main() {
     #fi
     #if(PICK_MODE_UINT)
     objectID = u_UINT_ID;
+    #fi
+    #if(PICK_MODE_UINT_PRIM)
+    PrimitiveIDout = PrimitiveID;
     #fi
 }

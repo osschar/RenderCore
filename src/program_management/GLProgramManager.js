@@ -136,12 +136,16 @@ export class GLProgramManager {
 
 			// Create attribute setter function
 			attributeSetter[info.name] = {};
-			attributeSetter[info.name]['set'] = function (buffer, item_size, instanced = false, divisor = 0) {
+			attributeSetter[info.name]['set'] = function (buffer, item_size, instanced = false, divisor = 0, uint32 = false) {
 
 				if(item_size <= 4){
 					self._gl.enableVertexAttribArray(location);
 					self._gl.bindBuffer(self._gl.ARRAY_BUFFER, buffer);
-					self._gl.vertexAttribPointer(location, item_size, self._gl.FLOAT, false, 0, 0);
+					if (uint32) {
+						self._gl.vertexAttribIPointer(location, item_size, self._gl.UNSIGNED_INT, 0, 0);
+					}else{
+						self._gl.vertexAttribPointer(location, item_size, self._gl.FLOAT, false, 0, 0);
+					}
 
 					if(instanced) {
 						self._gl.vertexAttribDivisor(location, divisor);

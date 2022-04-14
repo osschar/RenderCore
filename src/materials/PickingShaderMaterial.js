@@ -10,7 +10,8 @@ import {MaterialProgramTemplate} from "../program_management/MaterialProgramTemp
 export class PickingShaderMaterial extends CustomShaderMaterial {
     static PICK_MODE = {
         RGB: 0,
-        UINT: 1
+        UINT: 1,
+        UINT_PRIM: 2
     };
     static DEFAULT_PICK_MODE = PickingShaderMaterial.PICK_MODE.RGB;
     constructor(programName = "TRIANGLES", uniforms = {}, attributes = {}, args = {}) {
@@ -36,13 +37,15 @@ export class PickingShaderMaterial extends CustomShaderMaterial {
 
 			this._pickMode = pickMode;
 
-
+            this.rmSBFlag("PICK_MODE_RGB");
+            this.rmSBFlag("PICK_MODE_UINT");
+            this.rmSBFlag("PICK_MODE_UINT_PRIM");
             if(pickMode === PickingShaderMaterial.PICK_MODE.RGB){
-                this.rmSBFlag("PICK_MODE_UINT");
                 this.addSBFlag("PICK_MODE_RGB");
             }else if(pickMode === PickingShaderMaterial.PICK_MODE.UINT){
-                this.rmSBFlag("PICK_MODE_RGB");
                 this.addSBFlag("PICK_MODE_UINT");
+            }else if(pickMode === PickingShaderMaterial.PICK_MODE.UINT_PRIM){
+                this.addSBFlag("PICK_MODE_UINT_PRIM");
             }else{
                 console.error("Unknown pick mode: [" + pickMode + "].");
             }
