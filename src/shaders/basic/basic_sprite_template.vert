@@ -13,7 +13,6 @@ precision mediump float;
 uniform mat4 MVMat; // Model View Matrix
 uniform mat4 PMat;  // Projection Matrix
 uniform vec2 spriteSize;
-uniform float aspect;
 uniform vec2 viewport;
 uniform float MODE;
 
@@ -53,21 +52,24 @@ out vec2 deltaVPos;
 //**********************************************************************************************************************
 void main() {
      // Model view position
-    vec4 VPos_viewspace = MVMat * vec4(VPos, 1.0);
     //vec4 VCenter_viewspace = MVMat * vec4(center, 1.0);
 
+    vec4 VPos_viewspace;
 
     if(MODE == SPRITE_SPACE_WORLD){
+        VPos_viewspace = MVMat * vec4(VPos, 1.0);
         // position + delta offset
-        vec4 delta_viewspace = vec4(deltaOffset * spriteSize.xy, 0.0, 0.0);
+        //vec4 delta_viewspace = vec4(deltaOffset * spriteSize.xy, 0.0, 0.0);
 
-        vec4 deltaVPos_viewspace = (VPos_viewspace + delta_viewspace);
+        //vec4 deltaVPos_viewspace = (VPos_viewspace + delta_viewspace);
 
 
         // world space size position
         //gl_Position = (PMat * VPos_viewspace) + delta; //v1
-        gl_Position = PMat * deltaVPos_viewspace; //v2
+        //gl_Position = PMat * deltaVPos_viewspace; //v2
 
+        // MT version, assume vertices in x,y plane, z = 0; also, assume unit size (vertices at +-0.5 x and y)
+        gl_Position = PMat * (VPos_viewspace + vec4(VPos, 1.0)*vec4(spriteSize.xy, 0.0, 0.0));
 
         #if (CIRCLES)
         // set for circle shape
@@ -77,19 +79,24 @@ void main() {
         VCenter = VCenter_viewspace.xy;
         #fi
     }else if(MODE == SPRITE_SPACE_SCREEN){
+        // Need position of the center!
+        VPos_viewspace = MVMat * vec4(0.0, 0.0, 0.0, 1.0);
+
         // Projected position + delta offset
-        vec2 delta_screenspace = deltaOffset * spriteSize.xy;
-        vec3 delta_NDC = vec3(delta_screenspace.xy / viewport, 0.0);
+        //vec2 delta_screenspace = deltaOffset * spriteSize.xy;
+        //vec3 delta_NDC = vec3(delta_screenspace.xy / viewport, 0.0);
 
         vec4 VPos_clipspace = PMat * VPos_viewspace;
-        vec3 VPos_NDC = VPos_clipspace.xyz / VPos_clipspace.w;
-        vec3 deltaVPos_NDC = VPos_NDC + delta_NDC;
+        //vec3 VPos_NDC = VPos_clipspace.xyz / VPos_clipspace.w;
+        //vec3 deltaVPos_NDC = VPos_NDC + delta_NDC;
 
 
         // screen space size position
         //gl_Position = deltaVPos_NDC;
-        gl_Position = vec4(deltaVPos_NDC * VPos_clipspace.w, VPos_clipspace.w);
+        // gl_Position = vec4(deltaVPos_NDC * VPos_clipspace.w, VPos_clipspace.w);
 
+        // MT version
+        gl_Position = VPos_clipspace + vec4(VPos.xy * 2.0 * spriteSize.xy / viewport * VPos_clipspace.w, 0.0, 0.0);
 
         #if (CIRCLES)
         // set for circle shape

@@ -1,11 +1,17 @@
 import {CustomShaderMaterial} from './CustomShaderMaterial.js';
 import {Color} from "../math/Color.js";
 import {Vector2} from '../math/Vector2.js';
-import {SPRITE_SPACE_SCREEN} from '../constants.js';
+import {SPRITE_SPACE_SCREEN, SPRITE_SPACE_WORLD} from '../constants.js';
 import { Float32Attribute } from '../core/BufferAttribute.js';
 
 
 export class SpriteBasicMaterial extends CustomShaderMaterial {
+
+    /**
+     * WARNING:
+     * - constructor does not pass arguments to parent class
+     * - evades "custom" in shader name by setting programName after super
+     */
     constructor(args = {}){
         super();
 
@@ -14,28 +20,20 @@ export class SpriteBasicMaterial extends CustomShaderMaterial {
 
         //ASSEMBLE MATERIAL
         this.color = args.color ? args.color : new Color(Math.random() * 0xffffff);
+        this.emissive = args.emissive ? args.emissive : new Color(Math.random() * 0xffffff);
+        this.diffuse = args.diffuse ? args.diffuse : new Color(Math.random() * 0xffffff);
+
         this.drawCircles = args.drawCircles ? args.drawCircles : false;
 
-        this._spriteSize = new Vector2(1, 1);//deprecated
         this.setUniform("spriteSize", args.spriteSize ? args.spriteSize : [1.0, 1.0]);
         // Uniforms aspect and viewport set by MeshRenderer based on actual viewport
-        this.setUniform("MODE", args.mode ? args.mode : SPRITE_SPACE_SCREEN);
+
+        // this.setUniform("MODE", args.mode ? args.mode : SPRITE_SPACE_SCREEN);
+        this.setUniform("MODE", args.mode ? args.mode : SPRITE_SPACE_WORLD);
+
         this.setAttribute("deltaOffset", args.baseGeometry ? SpriteBasicMaterial._setupDeltaDirections(args.baseGeometry) : null);
     }
 
-
-    get spriteSize() { return this._spriteSize; }
-    set spriteSize(val) {
-		if (!val.equals(this._spriteSize)) {
-			this._spriteSize = val;
-
-			// Notify onChange subscriber
-			if (this._onChangeListener) {
-				var update = {uuid: this._uuid, changes: {spriteSize: this._spriteSize}};
-				this._onChangeListener.materialUpdate(update)
-			}
-		}
-	}
     get color() { return this._color; }
     set color(val) {
         this._color = val;
@@ -47,6 +45,26 @@ export class SpriteBasicMaterial extends CustomShaderMaterial {
         }
     }
 
+    get emissive() { return this._emissive; }
+    set emissive(val) {
+        this._emissive = val;
+
+        // Notify onChange subscriber
+        if (this._onChangeListener) {
+            var update = {uuid: this._uuid, changes: {emissive: this._emissive.getHex()}};
+            this._onChangeListener.materialUpdate(update)
+        }
+    }
+    get diffuse() { return this._diffuse; }
+    set diffuse(val) {
+        this._diffuse = val;
+
+        // Notify onChange subscriber
+        if (this._onChangeListener) {
+            var update = {uuid: this._uuid, changes: {diffuse: this._diffuse.getHex()}};
+            this._onChangeListener.materialUpdate(update)
+        }
+    }
 
     update(data) {
         super.update(data);
@@ -56,6 +74,14 @@ export class SpriteBasicMaterial extends CustomShaderMaterial {
                 case "color":
                     this._color = data.color;
                     delete data.color;
+                    break;
+                case "emissive":
+                    this._emissive = data.emissive;
+                    delete data.emissive;
+                    break;
+                case "diffuse":
+                    this._diffuse = data.diffuse;
+                    delete data.diffuse;
                     break;
                 case "spriteSize":
                     this._spriteSize = data.spriteSize;
