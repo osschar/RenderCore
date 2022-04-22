@@ -170,9 +170,12 @@ void main() {
 
 
     #if (TEXTURE)
-        // Apply all of the textures
-        #for I_TEX in 0 to NUM_TEX
-            color *= texture(material.texture##I_TEX, fragUV);
+        // Apply only the first texture -- second one is for instancing
+        #for I_TEX in 0 to 1
+            vec4 texcol = texture(material.texture##I_TEX, fragUV);
+            if (texcol.w <= 0.00392) discard;
+            // if (texcol.w < 0.25) gl_FragDepth = 1.0; else gl_FragDepth = gl_FragCoord.z;
+            color *= texcol;
         #end
     #fi
 }

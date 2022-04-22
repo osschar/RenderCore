@@ -18,6 +18,13 @@
  * (model-view coordinates). E.g.: { mode: RC.SPRITE_SPACE_SCREEN, spriteSize: [40, 40] }
  * By default the sprite is cenetered on its position, pass xy0/1 as needed to
  * place / center sprite in other ways.
+ * 
+ * Texture 0 in SpriteBasicMaterial is mapped onto the quad. Fragments with zero alpha
+ * are discarded so one can have shapes determined by the texture.
+ * For instancing, one should also bind a second RGBA32F texture (position 1).
+ * rgb components are used as position offsets (in Sprite's reference frame).
+ * a value could be used to pass color (as ubyte quad) or the whole concept could
+ * be extended to include per-instance sprite-size.
  */
 
 import {Quad} from './Quad.js';

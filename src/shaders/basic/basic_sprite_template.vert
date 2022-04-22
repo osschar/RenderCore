@@ -7,6 +7,17 @@ precision mediump float;
 #define SPRITE_SPACE_WORLD 0.0
 #define SPRITE_SPACE_SCREEN 1.0
 
+#if (INSTANCED)
+struct Material {
+    vec3 emissive;
+    vec3 diffuse;
+    #if (TEXTURE)
+        #for I_TEX in 0 to NUM_TEX
+            sampler2D texture##I_TEX;
+        #end
+    #fi
+};
+#fi
 
 //UIO
 //**********************************************************************************************************************
@@ -47,6 +58,10 @@ out vec2 deltaVPos;
     out vec3 vViewPosition;
 #fi
 
+#if (INSTANCED)
+    uniform Material material;
+#fi
+
 
 //MAIN
 //**********************************************************************************************************************
@@ -56,8 +71,23 @@ void main() {
 
     vec4 VPos_viewspace;
 
+    #if (INSTANCED)
+        ivec2 tsi = textureSize(material.texture1, 0);
+        vec2 ootsf = vec2(1.0 / float(tsi.x), 1.0 / float(tsi.y));
+        vec2 tc;
+        tc.y = (float(gl_InstanceID / tsi.x) + 0.5) * ootsf.y;
+        tc.x = (float(gl_InstanceID % tsi.x) + 0.5) * ootsf.x;
+        vec4 pos = texture(material.texture1, tc);
+        vec4 trans = vec4(pos.x, pos.y, pos.z, 0.0);
+    #fi
+
+
     if(MODE == SPRITE_SPACE_WORLD){
-        VPos_viewspace = MVMat * vec4(VPos, 1.0);
+        #if (INSTANCED)
+            VPos_viewspace = MVMat * (vec4(VPos, 1.0) + trans);
+        #else
+            VPos_viewspace = MVMat * vec4(VPos, 1.0);
+        #fi
         // position + delta offset
         //vec4 delta_viewspace = vec4(deltaOffset * spriteSize.xy, 0.0, 0.0);
 
@@ -80,7 +110,11 @@ void main() {
         #fi
     }else if(MODE == SPRITE_SPACE_SCREEN){
         // Need position of the center!
-        VPos_viewspace = MVMat * vec4(0.0, 0.0, 0.0, 1.0);
+        #if (INSTANCED)
+            VPos_viewspace = MVMat * (vec4(0.0, 0.0, 0.0, 1.0) + trans);
+        #else
+            VPos_viewspace = MVMat * vec4(0.0, 0.0, 0.0, 1.0);
+        #fi
 
         // Projected position + delta offset
         //vec2 delta_screenspace = deltaOffset * spriteSize.xy;
