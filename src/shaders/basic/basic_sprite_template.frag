@@ -7,6 +7,13 @@ precision mediump float;
 #define SPRITE_SPACE_WORLD 0.0
 #define SPRITE_SPACE_SCREEN 1.0
 
+#if (TEXTURE)
+    #if (INSTANCED)
+        const int TexLast = ##NUM_TEX - 2;
+    #else
+        const int TexLast = ##NUM_TEX - 1;
+    #fi
+#fi
 
 //STRUCT
 //**********************************************************************************************************************
@@ -30,6 +37,9 @@ struct PLight {
 struct Material {
     vec3 emissive;
     vec3 diffuse;
+    #if (INSTANCED)
+        sampler2D instanceData;
+    #fi
     #if (TEXTURE)
         #for I_TEX in 0 to NUM_TEX
             sampler2D texture##I_TEX;
@@ -77,7 +87,27 @@ in vec3 fragVPos;
 in vec2 VCenter;
 in vec2 deltaVPos;
 
-out vec4 color;
+#if (PICK_MODE_RGB)
+    uniform vec3 u_RGB_ID;
+    layout(location = 0) out vec4 objectID;
+#else if (PICK_MODE_UINT)
+    uniform uint u_UINT_ID;
+    layout(location = 0) out uint objectID;
+#else if (OUTLINE)
+    in vec3 v_position_viewspace;
+    in vec3 v_normal_viewspace;
+    in vec3 v_ViewDirection_viewspace;
+    in float v_distanceToCamera_viewspace;
+
+    //out vec4 color[3];
+    layout (location = 0) out vec4 de_viewspace;
+    layout (location = 1) out vec4 vp_viewspace;
+    layout (location = 2) out vec4 vn_viewspace;
+    layout (location = 3) out vec4 vd_viewspace;
+    layout (location = 4) out vec4 dc_viewspace;
+#else
+    out vec4 outColor;
+#fi
 
 #if (CLIPPING_PLANES)
     struct ClippingPlane {
@@ -124,6 +154,7 @@ void main() {
         if ( clipped ) discard;
     #fi
 
+    vec4 color;
 
     #if (CIRCLES)
     //DEPRECATED
@@ -171,11 +202,42 @@ void main() {
 
     #if (TEXTURE)
         // Apply only the first texture -- second one is for instancing
-        #for I_TEX in 0 to 1
-            vec4 texcol = texture(material.texture##I_TEX, fragUV);
-            if (texcol.w <= 0.00392) discard;
-            // if (texcol.w < 0.25) gl_FragDepth = 1.0; else gl_FragDepth = gl_FragCoord.z;
-            color *= texcol;
+        #for I_TEX in 0 to NUM_TEX
+            color *= texture(material.texture##I_TEX, fragUV);
         #end
+        #if (TRANSPARENT)
+            if (color.w <= 0.00392) discard;
+            // alternatively, increase fragment depth?
+            // if (texcol.w < 0.25) gl_FragDepth = some larger value, clamped to 1.0; else gl_FragDepth = gl_FragCoord.z;
+        #fi
     #fi
+
+    #if (PICK_MODE_RGB)
+        objectID = vec4(u_RGB_ID, 1.0);
+    #else if (PICK_MODE_UINT)
+        #if (PICK_INSTANCE)
+            objectID = uint(gl_InstanceID) + 1; // no +1 if we do white clear
+        #else
+            objectID = u_UINT_ID;
+        #fi
+    #else if (OUTLINE)
+        float depth = gl_FragCoord.z;
+        //depth = linearizeDepth_1(fragVPos.z);
+        //depth = linearizeDepth_2(gl_FragCoord.z) / u_Far;
+        de_viewspace = vec4(depth, 0.0, 0.0, 1.0);
+
+        //vp_viewspace = vec4(v_position_viewspace * 0.5 + 0.5, 1.0);
+        vp_viewspace = vec4(v_position_viewspace, 1.0);
+
+        //vn_viewspace = vec4(normalize(v_normal_viewspace) * 0.5 + 0.5, 0.0);
+        vn_viewspace = vec4(v_normal_viewspace, 0.0);
+
+        //vd_viewspace = vec4(normalize(v_ViewDirection_viewspace) * 0.5 + 0.5, 0.0);
+        vd_viewspace = vec4(v_ViewDirection_viewspace, 0.0);
+
+        dc_viewspace = vec4(v_distanceToCamera_viewspace, 0.0, 0.0, 1.0);
+    #else
+        outColor = color;
+    #fi
+
 }

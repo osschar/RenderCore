@@ -11,6 +11,11 @@ precision mediump float;
 struct Material {
     vec3 emissive;
     vec3 diffuse;
+    sampler2D instanceData;
+    // The following one could actually be instanced in int (or it has to be float?)
+    // #if (OUTLINE)
+    //    sampler2D instance_indices;
+    // #fi
     #if (TEXTURE)
         #for I_TEX in 0 to NUM_TEX
             sampler2D texture##I_TEX;
@@ -62,6 +67,15 @@ out vec2 deltaVPos;
     uniform Material material;
 #fi
 
+#if (OUTLINE)
+uniform mat3 NMat;  // Normal Matrix
+in vec3 VNorm;      // Vertex normal
+
+out vec3 v_position_viewspace;
+out vec3 v_normal_viewspace;
+out vec3 v_ViewDirection_viewspace;
+out float v_distanceToCamera_viewspace;
+#fi
 
 //MAIN
 //**********************************************************************************************************************
@@ -72,12 +86,12 @@ void main() {
     vec4 VPos_viewspace;
 
     #if (INSTANCED)
-        ivec2 tsi = textureSize(material.texture1, 0);
+        ivec2 tsi = textureSize(material.instanceData, 0);
         vec2 ootsf = vec2(1.0 / float(tsi.x), 1.0 / float(tsi.y));
         vec2 tc;
         tc.y = (float(gl_InstanceID / tsi.x) + 0.5) * ootsf.y;
         tc.x = (float(gl_InstanceID % tsi.x) + 0.5) * ootsf.x;
-        vec4 pos = texture(material.texture1, tc);
+        vec4 pos = texture(material.instanceData, tc);
         vec4 trans = vec4(pos.x, pos.y, pos.z, 0.0);
     #fi
 
@@ -165,5 +179,14 @@ void main() {
 
     #if (CLIPPING_PLANES)
         vViewPosition = -VPos_viewspace.xyz;
+    #fi
+
+    #if (OUTLINE)
+        v_position_viewspace = VPos_viewspace.xyz;
+        v_normal_viewspace = vec3(0.0, 0.0, -1.0);
+
+        float dToCam = length(VPos_viewspace.xyz);
+        v_ViewDirection_viewspace = -VPos_viewspace.xyz / dToCam;
+        v_distanceToCamera_viewspace = dToCam;
     #fi
  }

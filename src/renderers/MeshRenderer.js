@@ -723,6 +723,18 @@ export class MeshRenderer extends Renderer {
 			}
 		}
 
+		const instanceData = material.instanceData;
+		if(instanceData) {
+			const texture = "material.instanceData";
+			if (uniformSetter[texture] !== undefined) {
+				uniformSetter[texture].set(this._glManager.getTexture(instanceData), 4);
+			}else{
+				// console.warn("---------------------------------------------------");
+				// console.warn(object);
+				// console.warn("Texture unifrom: " + texture + " not used in shader");
+				// console.warn("---------------------------------------------------");
+			}
+		}
 
 		// Setup texture uniforms (Are common for both predefined materials and custom shader material)
 		let textures = material.maps;
