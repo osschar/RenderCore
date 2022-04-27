@@ -7,13 +7,6 @@ precision mediump float;
 #define SPRITE_SPACE_WORLD 0.0
 #define SPRITE_SPACE_SCREEN 1.0
 
-#if (TEXTURE)
-    #if (INSTANCED)
-        const int TexLast = ##NUM_TEX - 2;
-    #else
-        const int TexLast = ##NUM_TEX - 1;
-    #fi
-#fi
 
 //STRUCT
 //**********************************************************************************************************************
