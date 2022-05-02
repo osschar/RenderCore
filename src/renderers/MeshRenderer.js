@@ -487,6 +487,12 @@ export class MeshRenderer extends Renderer {
 					buffer = this._glManager.getAttributeBuffer(MMat);
 					attributeSetter["MMat"].set(buffer, 16, object.instanced, MMat.divisor);
 					break;
+				case "gl_InstanceID":
+					if ( ! this._reported_gl_instanceid) {
+						console.warn("MeshRenderer._setup_attributes -- for some reason wants to set gl_InstanceID as attribute (??)");
+						this._reported_gl_instanceid = true;
+					}
+					break;
 				default:
 					let found = false;
 
@@ -717,6 +723,18 @@ export class MeshRenderer extends Renderer {
 			}
 		}
 
+		const instanceData = material.instanceData;
+		if(instanceData) {
+			const texture = "material.instanceData";
+			if (uniformSetter[texture] !== undefined) {
+				uniformSetter[texture].set(this._glManager.getTexture(instanceData), 4);
+			}else{
+				// console.warn("---------------------------------------------------");
+				// console.warn(object);
+				// console.warn("Texture unifrom: " + texture + " not used in shader");
+				// console.warn("---------------------------------------------------");
+			}
+		}
 
 		// Setup texture uniforms (Are common for both predefined materials and custom shader material)
 		let textures = material.maps;
