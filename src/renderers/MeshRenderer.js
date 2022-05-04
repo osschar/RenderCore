@@ -365,10 +365,7 @@ export class MeshRenderer extends Renderer {
 					attributeSetter["MMat"].set(buffer, 16, object.instanced, MMat.divisor);
 					break;
 				case "gl_InstanceID":
-					if ( ! this._reported_gl_instanceid) {
-						console.warn("MeshRenderer._setup_attributes -- for some reason wants to set gl_InstanceID as attribute (??)");
-						this._reported_gl_instanceid = true;
-					}
+					// For some reason gl_InstanceID is considered an attribute. Ignore.
 					break;
 				default:
 					let found = false;
