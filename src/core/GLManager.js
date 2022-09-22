@@ -143,7 +143,6 @@ export class GLManager {
 
 		// Update textures
 		let textures = material.maps;
-
 		for (let i = 0; i < textures.length; i++) {
 			this._textureManager.updateTexture(textures[i], false);
 		}
@@ -168,7 +167,9 @@ export class GLManager {
 		if (heightMap) this._textureManager.updateTexture(heightMap, false);
 
 		const instanceData = material.instanceData;
-		if (instanceData) this._textureManager.updateTexture(instanceData, false);
+		for (let i = 0; i < instanceData.length; i++) {
+			this._textureManager.updateTexture(instanceData[i], false);
+		}
 
 		// CustomShaderMaterial may specify extra attributes
 		if (material instanceof CustomShaderMaterial) {
