@@ -66,7 +66,16 @@ in vec3 fragVPos;
     in vec2 fragUV;
 #fi
 
-out vec4 color;
+#if (PICK_MODE_UINT)
+    uniform uint u_UINT_ID;
+    #if (INSTANCED)
+        uniform bool u_PickInstance;
+        flat in uint InstanceID;
+    #fi
+    layout(location = 0) out uint objectID;
+#else
+    out vec4 color;
+#fi
 
 #if (CLIPPING_PLANES)
     struct ClippingPlane {
@@ -122,6 +131,9 @@ void main() {
         if ( clipped ) discard;
     #fi
 
+    #if (PICK_MODE_UINT)
+        objectID = u_UINT_ID;
+    #else
 
     // Calculate combined light contribution
     vec3 combined = ambient;
@@ -154,5 +166,7 @@ void main() {
         #for I_TEX in 0 to NUM_TEX
             color *= texture(material.texture##I_TEX, fragUV);
         #end
+    #fi
+
     #fi
 }
