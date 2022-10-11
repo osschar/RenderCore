@@ -8,19 +8,17 @@ precision mediump float;
 
 //UIO
 //**********************************************************************************************************************
-in vec3 v_position_viewspace;
-vec3 v_normal_viewspace = vec3(0.0, 0.0, 1.0);
-in vec3 v_ViewDirection_viewspace;
-// MINI in float v_distanceToCamera_viewspace;
+#if (PICK_MODE_UINT)
+    uniform uint u_UINT_ID;
+    layout(location = 0) out uint objectID;
+#else
+    in vec3 v_position_viewspace;
+    vec3 v_normal_viewspace = vec3(0.0, 0.0, 1.0);
+    in vec3 v_ViewDirection_viewspace;
 
-// MINI layout (location = 0) out vec4 de_viewspace;
-// MINI layout (location = 1) out vec4 vp_viewspace;
-// MINI layout (location = 2) out vec4 vn_viewspace;
-// MINI layout (location = 3) out vec4 vd_viewspace;
-// MINI layout (location = 4) out vec4 dc_viewspace;
-
-layout (location = 0) out vec4 vn_viewspace;
-layout (location = 1) out vec4 vd_viewspace;
+    layout (location = 0) out vec4 vn_viewspace;
+    layout (location = 1) out vec4 vd_viewspace;
+#fi
 
 //FUNCTIONS
 //**********************************************************************************************************************
@@ -37,21 +35,10 @@ layout (location = 1) out vec4 vd_viewspace;
 //MAIN
 //**********************************************************************************************************************
 void main() {
-    //******************************************************************************************************************//
-    // MINI float depth = gl_FragCoord.z;
-    //depth = linearizeDepth_1(fragVPos.z);
-    //depth = linearizeDepth_2(gl_FragCoord.z) / u_Far;
-    // MINI de_viewspace = vec4(depth, 0.0, 0.0, 1.0);
-
-    //vp_viewspace = vec4(v_position_viewspace * 0.5 + 0.5, 1.0);
-    // MINI vp_viewspace = vec4(v_position_viewspace, 1.0);
-
-    //vn_viewspace = vec4(normalize(v_normal_viewspace) * 0.5 + 0.5, 0.0);
+#if (PICK_MODE_UINT)
+    objectID = u_UINT_ID;
+#else
     vn_viewspace = vec4(v_normal_viewspace, 1.0);
-
-    //vd_viewspace = vec4(normalize(v_ViewDirection_viewspace) * 0.5 + 0.5, 0.0);
     vd_viewspace = vec4(v_ViewDirection_viewspace, 1.0);
-
-    // MINI dc_viewspace = vec4(v_distanceToCamera_viewspace, 0.0, 0.0, 1.0);
-    //******************************************************************************************************************//
+#fi
 }

@@ -32,11 +32,10 @@ in vec3 prevVertex;
 in vec3 nextVertex;
 in vec2 deltaOffset;
 
-out vec3 v_position_viewspace;
-//out vec3 v_normal_viewspace;
-out vec3 v_ViewDirection_viewspace;
-// MINI out float v_distanceToCamera_viewspace;
-
+#if (!PICK_MODE_UINT)
+    out vec3 v_position_viewspace;
+    out vec3 v_ViewDirection_viewspace;
+#fi
 
 //MAIN
 //**********************************************************************************************************************//
@@ -76,11 +75,10 @@ void main() {
         
         gl_Position = PMat * deltaVPos_viewspace;
 
-
-        v_position_viewspace = deltaVPos_viewspace.xyz;
-        //v_normal_viewspace = normal_viewspace;
-        v_ViewDirection_viewspace = normalize(-deltaVPos_viewspace.xyz);
-        // MINI v_distanceToCamera_viewspace = length(deltaVPos_viewspace.xyz);
+        #if (!PICK_MODE_UINT)
+            v_position_viewspace = deltaVPos_viewspace.xyz;
+            v_ViewDirection_viewspace = normalize(-deltaVPos_viewspace.xyz);
+        #fi
     }else if (MODE == STRIPE_SPACE_SCREEN){
         ///////////////////////////////////////////////////////////////////////////////////////////////////
         /*//SCREENSPACE DEFAULT
@@ -249,13 +247,12 @@ void main() {
         //gl_Position = vec4(deltaVPos_NDC, 1.0); //END
 
 
-        //vec4 POS = curr_viewspace.xyz;
-        vec4 POS = u_PMatInv * vec4(deltaVPos_NDC * curr_clipspace.w, curr_clipspace.w);
-
-        v_position_viewspace = POS.xyz;
-        //v_normal_viewspace = normal_viewspace;
-        v_ViewDirection_viewspace = normalize(-POS.xyz);
-        // MINI v_distanceToCamera_viewspace = length(POS.xyz);
+        #if (!PICK_MODE_UINT)
+            //vec4 POS = curr_viewspace.xyz;
+            vec4 POS = u_PMatInv * vec4(deltaVPos_NDC * curr_clipspace.w, curr_clipspace.w);
+            v_position_viewspace = POS.xyz;
+            v_ViewDirection_viewspace = normalize(-POS.xyz);
+        #fi
         ///////////////////////////////////////////////////////////////////////////////////////////////////
         // //SCREENSPACE DEFAULT
         // //(viewspace tnagent, viewspace normal)
