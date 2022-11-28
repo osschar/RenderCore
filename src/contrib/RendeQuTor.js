@@ -60,7 +60,7 @@ export class RendeQuTor
             this.RP_Outline_mat.requiredProgram(this.renderer),
             this.RP_GaussH_mat.requiredProgram(this.renderer),
             this.RP_Blend_mat.requiredProgram(this.renderer),
-            this.RP_ToScreen_mat.requiredProgram(this.renderer)
+            this.RP_ToScreen_mat.requiredProgram(this.renderer),
             this.RP_ToneMapToScreen_mat.requiredProgram(this.renderer)
           ]);
     }
