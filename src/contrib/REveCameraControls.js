@@ -238,7 +238,7 @@ export class REveCameraControls extends EventDispatcher {
 					camTrans.setBaseVector(4, b4);
 					scale = 1.0;
 
-					scope.object.near = Math.min(lookAtDist*0.1, 20);	
+					scope.object.near = Math.min(lookAtDist*0.1, 20);
 				}
 
 				// pan/ truck
@@ -945,7 +945,7 @@ export class REveCameraControls extends EventDispatcher {
 				te[ 0 ] = _x.x; te[ 4 ] = _y.x; te[ 8 ] = _z.x;
 				te[ 1 ] = _x.y; te[ 5 ] = _y.y; te[ 9 ] = _z.y;
 				te[ 2 ] = _x.z; te[ 6 ] = _y.z; te[ 10 ] = _z.z;
-		
+
 				return this;
 			};
 
