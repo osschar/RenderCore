@@ -61,7 +61,7 @@ export {GLAttributeManager} from '../core/GLAttributeManager.js';
 export {GLFrameBufferManager} from '../core/GLFrameBufferManager.js';
 export {GLTextureManager} from '../core/GLTextureManager.js';
 export {GLManager} from '../core/GLManager.js';
-// export {Canvas} from '../core/Canvas.js';
+export {Canvas} from '../core/Canvas.js';
 // export {CanvasManager} from '../core/CanvasManager.js';
 export {Object3D} from '../core/Object3D.js';
 export {Raycaster} from '../core/Raycaster.js';
