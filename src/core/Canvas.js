@@ -7,10 +7,6 @@ import {_Math} from '../math/Math.js';
 
 export class Canvas {
 
-
-	_pixelRatio = 1;
-
-
 	//CONST
 	constructor(parentDOM) {
 		this._canvasDOM = this.generateCanvasDOM();

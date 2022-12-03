@@ -1,12 +1,6 @@
 /**
  * Reduced RenderCore for ROOT-REve.
- *
- * /opt/npm/bin/rollup REveRenderCore.js --format es --file REveRenderCore.mjs
- * /opt/npm/bin/uglifyjs REveRenderCore.mjs -c -b indent_level=1 -m -o REveRenderCore-min.mjs
- * tar cf RenderCore.tar REveRenderCore-min.mjs ../shaders/
- * gzip -9 RenderCore.tar
- * sha256sum -b RenderCore.tar.gz
- * mv RenderCore.tar.gz ROOT-SRC/builtins/rendercore/
+ * See dist/reve/Makefile for further packing procedure.
  */
 
 // Constants
