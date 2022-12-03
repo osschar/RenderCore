@@ -66,7 +66,8 @@ export class GLTextureManager {
 			this._gl.texImage2D(this._gl.TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, null); //allocation
 			texture.update.size = false;
 		}
-		this._gl.texSubImage2D(this._gl.TEXTURE_2D, 0, 0, 0, width, height, format, type, texture.image);
+		if (texture.image)
+			this._gl.texSubImage2D(this._gl.TEXTURE_2D, 0, 0, 0, width, height, format, type, texture.image);
 		this._gl.pixelStorei(this._gl.UNPACK_FLIP_Y_WEBGL, false);
 
 		// Generate mipmaps
@@ -217,12 +218,18 @@ export class GLTextureManager {
 		// this._gl.texImage2D(this._gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, 0, internalFormat, size, size, 0, format, type, texture.images.bottom);
 		// this._gl.texImage2D(this._gl.TEXTURE_CUBE_MAP_POSITIVE_Z, 0, internalFormat, size, size, 0, format, type, texture.images.front);
 		// this._gl.texImage2D(this._gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, internalFormat, size, size, 0, format, type, texture.images.back);
-		this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_POSITIVE_X, 0, 0, 0, size, size, format, type, texture.images.right);
-		this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_NEGATIVE_X, 0, 0, 0, size, size, format, type, texture.images.left);
-		this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_POSITIVE_Y, 0, 0, 0, size, size, format, type, texture.images.top);
-		this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, 0, 0, 0, size, size, format, type, texture.images.bottom);
-		this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_POSITIVE_Z, 0, 0, 0, size, size, format, type, texture.images.front);
-		this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, 0, 0, size, size, format, type, texture.images.back);
+		if (texture.images.right)
+			this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_POSITIVE_X, 0, 0, 0, size, size, format, type, texture.images.right);
+		if (texture.images.left)
+			this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_NEGATIVE_X, 0, 0, 0, size, size, format, type, texture.images.left);
+		if (texture.images.top)
+			this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_POSITIVE_Y, 0, 0, 0, size, size, format, type, texture.images.top);
+		if (texture.images.bottom)
+			this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, 0, 0, 0, size, size, format, type, texture.images.bottom);
+		if (texture.images.front)
+			this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_POSITIVE_Z, 0, 0, 0, size, size, format, type, texture.images.front);
+		if (texture.images.back)
+			this._gl.texSubImage2D(this._gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, 0, 0, 0, size, size, format, type, texture.images.back);
 		this._gl.pixelStorei(this._gl.UNPACK_FLIP_Y_WEBGL, false);
 
 		// Generate mipmaps
