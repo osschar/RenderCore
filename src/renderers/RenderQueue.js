@@ -342,11 +342,15 @@ export class RenderQueue {
 				additionalData: this._forwardedAdditionalData};
 	}
 
-	render() {
-		this.render_begin();
+	render(used_check = false) {
+		this.render_begin(used_check);
 
 		for (let i = 0; i < this._renderQueue.length; i++) {
 			this.render_pass(this._renderQueue[i], i);
+			if (this.used_check && ! this.used_last) {
+				// console.log("RenderQueue early exit on pass", i , "out of", this._renderQueue.length, ". GL error", err);
+				break;
+			}
 		}
 
 		return this.render_end();

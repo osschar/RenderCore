@@ -251,14 +251,14 @@ export class RendeQuTor
     {
         this.renderer.pick_setup(this.pick_center, this.pick_center);
 
-        let state = this.pqueue.render();
+        let state = this.pqueue.render(true);
         state.x = x;
         state.y = y;
         state.depth = -1.0;
         state.object = this.renderer.pickedObject3D;
-        // console.log("RenderQuTor::pick", state);
+        // console.log("RenderQuTor::pick", state, "used last", this.pqueue.used_last);
 
-        if (detect_depth && this.renderer.pickedObject3D !== null)
+        if (this.pqueue.used_last && detect_depth && this.renderer.pickedObject3D !== null)
         {
             let rdr = this.renderer;
             let gl  = rdr.gl;
