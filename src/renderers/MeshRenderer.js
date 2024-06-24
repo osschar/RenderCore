@@ -54,7 +54,6 @@ export class MeshRenderer extends Renderer {
 			point: [],
 			spot: []
 		};
-		this._zVector = new Vector3();
 		// endregion
 
 		// Enable depth testing (disable depth testing with gl.ALWAYS)
@@ -1302,6 +1301,10 @@ export class MeshRenderer extends Renderer {
 	_objectInFrustum(object) {
 		if(!object.frustumCulled) return true;
 
+		// This shit is not even wrong! How can this._sphere be correct ????
+		// Need world-sphere in the object.
+		// All the sphere stuff really needs to happen during upward step
+		// of updateMatrixWorld()
 
 		if(object._UPDATE_BOUNDS){
 			const boundingSphere = object.boundingSphere;

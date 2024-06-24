@@ -18,10 +18,15 @@ import {Mesh} from "../objects/Mesh.js";
 
 export class Object3D {
 
-	constructor() {
+	// Set this to false if 4x4 matrices are always used. They need to be
+	// fully provided from outside. None of position, roation, etc.
+	// functions will work, ie, will result in null object access.
+	// Auto-update of local matrix will also be turned off.
+	// Quaterninons can still be enabled by calling enableQuaterions()
+	// and, optionally, set matrixAutoUpdate to true.
+	static sDefaultQuaternionsAndAutoUpdate = true;
 
-		// Self reference for callbacks
-		var self = this;
+	constructor(is_group_only=false) {
 
 		// Unique identifier
 		this._uuid = _Math.generateUUID();
@@ -30,38 +35,47 @@ export class Object3D {
 		this._parent = null;
 		this._children = [];
 
-		this._position = new Vector3();
-		this._rotation = new Euler();
-		this._quaternion = new Quaternion();
-		this._scale = new Vector3(1, 1, 1);
-
 		this._visible = true;
 		this._frustumCulled = true;
 
-		function onRotationChange() {
-			self.quaternion.setFromEuler(self.rotation, false);
+		if (Object3D.sDefaultQuaternionsAndAutoUpdate) {
+			this.enableQuaternions();
 		}
-
-		function onQuaternionChange() {
-			self.rotation.setFromQuaternion(self.quaternion, undefined, false);
-		}
-
-		this._rotation._onChange(onRotationChange);
-		this._quaternion._onChange(onQuaternionChange);
-
 
 		this._matrix = new Matrix4();		//MMat (TRS) local (parent independent)
 		this._matrixWorld = new Matrix4();	//MMat (TRS) global (parent dependent)
 		this._matrixWorldNeedsUpdate = false;
 
-		// Model view matrix is derived from the object world matrix and inverse camera world matrix
-		this._modelViewMatrix = new Matrix4();
-		this._normalMatrix = new Matrix3();
-		this._modelViewProjectionMatrix = new Matrix4();
+		// Model view matrix is derived from the object world matrix and inverse camera world matrix.
+		// These are only needed if we actually render something.
+		if ( ! is_group_only) {
+			this._modelViewMatrix = new Matrix4();
+			this._normalMatrix = new Matrix3();
+			this._modelViewProjectionMatrix = new Matrix4();
+		}
 
-		this._matrixAutoUpdate = true;
+		this._matrixAutoUpdate = Object3D.sDefaultQuaternionsAndAutoUpdate;
 
 		this._onChangeListener = null;
+
+		this._renderOrder = 0;
+		this._isStatic = false;          // MT-???? why is this needed? seems like a leftover.
+		this._staticStateDirty = true;   // MT-???? -- as above --
+		this._renderingPrimitive = TRIANGLES;	//default rendering primitive
+		this._pickable = false;
+		this._zVector = new Vector3();
+		this._boundingSphere = new Sphere(new Vector3(0, 0, 0), Infinity);
+		this._boundingSphereFixed = false;
+	}
+
+	enableQuaternions() {
+		this._position = new Vector3();
+		this._rotation = new Euler();
+		this._quaternion = new Quaternion();
+		this._scale = new Vector3(1, 1, 1);
+
+		this._rotation._onChange(() => this.quaternion.setFromEuler(this.rotation, false));
+		this._quaternion._onChange(() => this.rotation.setFromQuaternion(this.quaternion, undefined, false));
 
 		// References to wrapped functions
 		this.rotateOnAxis = rotateOnAxis;
@@ -76,15 +90,7 @@ export class Object3D {
 		this.translateY = translateY;
 		this.translateZ = translateZ;
 		this.translate = translate;
-
-		this._renderOrder = 0;
-		this._isStatic = false;
-		this._staticStateDirty = true;
-		this._renderingPrimitive = TRIANGLES;	//default rendering primitive
-		this._pickable = false;
-		this._zVector = new Vector3();
-		this._boundingSphere = new Sphere(new Vector3(0, 0, 0), Infinity);
-	}
+		}
 
 	//region GETTERS
 	get parent() { return this._parent; }
@@ -494,6 +500,16 @@ export class Object3D {
 	// region BOUNDING SPHERE
 	computeBoundingSphere() {
 		let spheres = [];
+
+		// What? Should separete self and children's b-spheres
+		// + the world-matrix transformed ones.
+		// Also, would it not be easier to combine 2 spheres as we go
+		// vs looping over all of them at the end?
+		// Ie, combining two spheres is not too big of a deal.
+		//
+		// Also, children bSpheres are not multiplied by matrices.
+		//
+		// Also ... this is never called from anywhere.
 
 		// Fetch bounding spheres of all of the children
 		this.traverse(function (object) {
