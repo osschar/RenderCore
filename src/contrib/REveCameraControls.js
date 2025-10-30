@@ -141,7 +141,7 @@ export class REveCameraControls extends EventDispatcher {
 
 			if (this.object.isPerspectiveCamera) {
 				let fovDefault = 30;
-				let fov = Math.min(fovDefault, this.object.aspect*fovDefault);
+				let fov = Math.min(fovDefault, this.object.aspect * fovDefault);
 				let dollyDefault = bb_R / (2.0 * Math.tan(fov * Math.PI * 0.8/ 180));
 
 				camTrans.moveLF(1, dollyDefault);
@@ -375,7 +375,7 @@ export class REveCameraControls extends EventDispatcher {
 			} else if (event.shiftKey) {
 				css = scope.MouseCSScaleFactor = 10.0;
 			}
-			console.log("YEBO fac", css);
+			// console.log("mouseCSScale", css);
 			return css;
 		}
 
@@ -386,7 +386,7 @@ export class REveCameraControls extends EventDispatcher {
 			} else if (event.shiftKey) {
 				css = scope.MouseCSScaleFactor = 5.0;
 			}
-			console.log("YEBO fac", css);
+			// console.log("dolyCSScale", css);
 			return css;
 		}
 
