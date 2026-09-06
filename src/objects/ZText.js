@@ -24,6 +24,8 @@ export class ZText extends Mesh {
     /// comfortably grabbable. At this size the grip overlaps the glyphs, which is
     /// fine -- it is drawn only while hovered.
     static GRIP_MIN_PX = 28;
+    /// Smallest interactive font size, in CSS pixels.
+    static MIN_FONT_SIZE_PX = 7;
     /// Grip line thickness, as a fraction of the frame line width...
     static GRIP_LINE_FRAC = 0.25;
     /// ...floored at this many CSS pixels. A quarter of a thin frame is
@@ -91,6 +93,7 @@ export class ZText extends Mesh {
         /// Per-object CSS-pixel scale; the owning viewer keeps it current.
         this._pxToScreen = ZText.PX_TO_SCREEN_SPACE;
         this._fontHinting = args.fontHinting !== undefined ? args.fontHinting : 1.0;
+        this._fontWeight = args.fontWeight !== undefined ? args.fontWeight : 0.0;
         this._color = args.color !== undefined ? args.color : [0.0,0.0,0.0];
         this._font = args.font !== undefined ? args.font : null;
 
@@ -104,6 +107,7 @@ export class ZText extends Mesh {
         this.material.setUniform("MODE", this._mode);
         this.material.setUniform("offset", [this._xPos, this._yPos]);
         this.material.setUniform("hint_amount", this._fontHinting);
+        this.material.setUniform("weight", this._fontWeight);
         this.material.setUniform("u_use_fixed_color", 0);
         this.material.setUniform("u_fixed_color", [0.0, 0.0, 0.0, 0.0]);
 
@@ -151,7 +155,10 @@ export class ZText extends Mesh {
     ovlGetPos()      { return [this._xPos, this._yPos]; }
     ovlSetPos(x, y)  { this.setOffset([x, y]); }
     ovlGetSize()     { return this._fontSize; }
-    ovlSetSize(s)    { this.fontSize = s; }
+    /// Floored like ZLogo's: a resize drag could otherwise take the text to zero,
+    /// leaving nothing on screen and nothing to grab to bring it back. The floor
+    /// is in CSS pixels, so it means the same thing on any viewport.
+    ovlSetSize(s)    { this.fontSize = Math.max(s, ZText.MIN_FONT_SIZE_PX * this._pxToScreen); }
 
     /// Tell the object how big a CSS pixel is in its viewport, and rebuild if it
     /// changed. Returns true if the geometry was rebuilt.
@@ -196,6 +203,13 @@ export class ZText extends Mesh {
         this._fontSize = fontSize;
         this.recalcGeometry();
     }
+
+    /// Synthetic bold: 0 is the font as authored, positive is heavier.
+    set fontWeight(w) {
+        this._fontWeight = w;
+        this.material.setUniform("weight", w);
+    }
+    get fontWeight() { return this._fontWeight; }
     get fontSize() {
         return this._fontSize;
     }

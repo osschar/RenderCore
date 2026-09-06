@@ -36,6 +36,12 @@ out vec4 color;
 #fi
 
 uniform float hint_amount;
+// Stroke weight. The SDF threshold is what decides how much of the field counts
+// as inside, so lowering it dilates every glyph -- continuous synthetic bold, at
+// any size, from the one atlas. Needed because a label a few pixels tall has
+// strokes about one pixel wide, where coverage varies along the stroke and the
+// glyph reads as thin and ragged. 0 is the font as authored.
+uniform float weight;
 uniform int   u_use_fixed_color;
 uniform vec4  u_fixed_color;
 
@@ -43,7 +49,10 @@ uniform vec4  u_fixed_color;
 float sdf_alpha( float sdf, float dofs, float horz_scale, float vert_scale, float vgrad ) {
     float hdoffset = mix( dofs * horz_scale, dofs * vert_scale, vgrad );
     float rdoffset = mix( dofs, hdoffset, hint_amount );
-    float alpha = smoothstep( 0.5 - rdoffset, 0.5 + rdoffset, sdf );
+    // Clamped so a large weight cannot drag the threshold to zero, which would
+    // flood the whole quad rather than embolden the glyph.
+    float thr = clamp( 0.5 - weight, 0.05, 0.95 );
+    float alpha = smoothstep( thr - rdoffset, thr + rdoffset, sdf );
     alpha = pow( alpha, 1.0 + 0.2 * vgrad * hint_amount );
     return alpha;
 }
