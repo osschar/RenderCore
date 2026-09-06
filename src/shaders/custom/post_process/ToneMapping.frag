@@ -64,11 +64,19 @@ void main() {
         float alpha = clamp(hdrColor.a, 0.0, 1.0);
 
         // The scene is blended into a zero-cleared buffer, so rgb arrives
-        // premultiplied by coverage. For a grabbed image we want straight alpha,
-        // so undo that before tone mapping -- otherwise the tone curve is applied
-        // to a coverage-scaled colour and partially covered pixels come out dark.
+        // premultiplied by coverage. Undo that before tone mapping -- otherwise
+        // the tone curve is applied to a coverage-scaled colour and partially
+        // covered pixels come out dark.
+        //
+        // This is needed on BOTH paths, not just for a grabbed image. The screen
+        // path finishes with mix(clearColor, mapped, alpha), which is the correct
+        // over-operator for a *straight* colour; feeding it a premultiplied one
+        // applies coverage twice, so a translucent pixel is composited as
+        // bg*(1-a) + a*a*C. The error vanishes at a=0 and a=1 and peaks near
+        // a=0.5, which is why it reads as translucent things being muddy rather
+        // than as anything obviously broken.
         vec3 src = hdrColor.rgb;
-        if (u_keep_alpha == 1 && alpha > 0.0)
+        if (alpha > 0.0)
             src = src / alpha;
 
         vec3 mapped;
