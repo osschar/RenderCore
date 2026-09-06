@@ -84,6 +84,13 @@ export class ZLogo extends ZSprite {
     /// Resize grip, matching ZText: fraction of the shorter side, floored in CSS px.
     static RESIZE_GRIP_FRAC = 0.05;
     static GRIP_MIN_PX = 28;
+    /// Frame and grip arms share one line width -- the frame is there to close
+    /// the grip square's other two sides, so a different width would show.
+    static GRIP_LINE_PX = 2.0;
+    /// Clearance between grip and frame, as a fraction of the grip square.
+    static GRIP_GAP_FRAC = 0.10;
+    /// Resting frame colour. A watermark has no line colour of its own.
+    static FRAME_COLOR = [0.30, 0.30, 0.30, 0.85];
 
     constructor(args = {}) {
         const size = args.size !== undefined ? args.size : 64;   // CSS pixels
@@ -96,6 +103,11 @@ export class ZLogo extends ZSprite {
                                                SpriteSize: [size, size],
                                                emissive: new Color(0xffffff) });
         mat.transparent = true;
+        // Frame/grip affordance lives in the fragment shader; the flag keeps it
+        // out of the ordinary and instanced ZSprite programs. Added before the
+        // picking/outline clones are taken in ZSprite, which build fresh
+        // materials and so correctly do not inherit it.
+        mat.addSBFlag("SPRITE_FRAME");
         super(null, mat);
 
         this.type = "ZLogo";
@@ -126,6 +138,14 @@ export class ZLogo extends ZSprite {
         this.enableQuaternions();
         this.position.set(this._xPos, this._yPos, 0.0);
         this.updateMatrix();
+
+        this._frameColor = args.frameColor !== undefined ? args.frameColor
+                                                         : ZLogo.FRAME_COLOR;
+        this.material.setUniform("u_FrameColor", this._frameColor);
+        this.material.setUniform("u_FrameLW", 0.0);   // off until hovered
+        this.material.setUniform("u_GripSq", 0.0);
+        this.material.setUniform("u_GripGap", 0.0);
+
         this._applySize();
     }
 
@@ -142,6 +162,32 @@ export class ZLogo extends ZSprite {
         const pr = Math.max(this._pxToScreen * this._vpH, 1e-6);
         const h = this._size * pr;
         this.material.setUniform("SpriteSize", [h * this._aspect_wh, h]);
+        this._applyFrame();
+    }
+
+    /// Grip geometry in CSS pixels. Single source of truth: the shader draws it
+    /// and getScreenRect() hit-tests it, so the sensitive area is exactly the
+    /// square that appears. Scales on the shorter side, so a wide logo does not
+    /// get a stretched handle.
+    _gripMetricsCss() {
+        const h = this._size, w = this._size * this._aspect_wh;
+        const sq  = Math.max(ZLogo.RESIZE_GRIP_FRAC * Math.min(w, h), ZLogo.GRIP_MIN_PX);
+        const lw  = ZLogo.GRIP_LINE_PX;
+        const gap = Math.max(lw, ZLogo.GRIP_GAP_FRAC * sq);
+        return { sq, lw, gap };
+    }
+
+    /// Push the affordance to the shader, in device px. Zero line width when not
+    /// hovered, or when the logo cannot be resized at all.
+    _applyFrame() {
+        const show = this._highlight && this.pickable && this.resizable;
+        if (!show) { this.material.setUniform("u_FrameLW", 0.0); return; }
+
+        const pr = Math.max(this._pxToScreen * this._vpH, 1e-6);
+        const m = this._gripMetricsCss();
+        this.material.setUniform("u_FrameLW", m.lw * pr);
+        this.material.setUniform("u_GripSq", m.sq * pr);
+        this.material.setUniform("u_GripGap", m.gap * pr);
     }
 
     setPixelScale(pxToScreen, vpW, vpH) {
@@ -166,9 +212,9 @@ export class ZLogo extends ZSprite {
         const hy = 0.5 * this._size * this._pxToScreen;
         const hx = hy * this._aspect_wh / aspect;
 
-        const sq_css = Math.max(ZLogo.RESIZE_GRIP_FRAC * 2.0 * Math.min(hy, hx * aspect) / this._pxToScreen,
-                                ZLogo.GRIP_MIN_PX);
-        const gy = sq_css * this._pxToScreen;
+        // Grab zone spans the drawn square plus its clearance, as in ZText.
+        const m = this._gripMetricsCss();
+        const gy = (m.sq + m.gap) * this._pxToScreen;
 
         return { x0: this._xPos - hx, x1: this._xPos + hx,
                  y0: this._yPos - hy, y1: this._yPos + hy,
@@ -179,6 +225,10 @@ export class ZLogo extends ZSprite {
         if (this._highlight === on) return;
         this._highlight = on;
         this.material.opacity = on ? 1.0 : this._baseOpacity;
+        this._applyFrame();
     }
+
+    setFrameColor(rgba) { this._frameColor = rgba;
+                          this.material.setUniform("u_FrameColor", rgba); }
     get highlight() { return this._highlight; }
 }
