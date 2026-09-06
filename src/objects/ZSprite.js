@@ -116,9 +116,14 @@ export class ZLogo extends ZSprite {
         this._highlight = false;
         this.material.opacity = this._baseOpacity;
 
-        // EveScene turns matrixAutoUpdate off for every element it builds, so the
-        // matrix has to be refreshed by hand or the object silently stays at the
-        // origin -- which for the overlay camera is the bottom-left corner.
+        // Two separate hazards, both about the object matrix.
+        // 1) GlViewerRCore sets Object3D.sDefaultQuaternionsAndAutoUpdate = false,
+        //    under which Object3D never creates position/quaternion/scale, so
+        //    `this.position` would be undefined here.
+        // 2) EveScene turns matrixAutoUpdate off for every element it builds, so
+        //    the matrix has to be refreshed by hand or the object silently stays
+        //    at the origin -- for the overlay camera, the bottom-left corner.
+        this.enableQuaternions();
         this.position.set(this._xPos, this._yPos, 0.0);
         this.updateMatrix();
         this._applySize();
