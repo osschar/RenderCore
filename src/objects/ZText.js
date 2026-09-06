@@ -34,6 +34,26 @@ export class ZText extends Mesh {
     /// this fraction of the grip square.
     static GRIP_GAP_FRAC = 0.10;
 
+    //--------------------------------------------------------------------------
+    // Anchoring. `offset` places the text; these say WHICH point of the text
+    // lands there. Same model as TGLFont::Render(..., ETextAlignH_e,
+    // ETextAlignV_e), which shifts the whole block by a fraction of its bounding
+    // box -- so it is applied here at layout time and the shader is untouched.
+    //
+    // ORIGIN is the legacy behaviour and stays the default: the position is the
+    // text origin (the pen start), which sits slightly inside the box because of
+    // the frame border. The other values are relative to the box, which is what
+    // an axis label wants -- CENTER/TOP to hang under a tick on a bottom axis,
+    // RIGHT/MIDDLE against a left axis, and so on.
+    //--------------------------------------------------------------------------
+    static ALIGN_H = { ORIGIN: 0, LEFT: 1, CENTER: 2, RIGHT: 3 };
+    static ALIGN_V = { ORIGIN: 0, TOP: 1, MIDDLE: 2, BOTTOM: 3 };
+
+    /// Default CSS-pixel scale, used until a viewer supplies its own. NOTE this
+    /// is only a fallback: the real value is per viewer (see _pxToScreen), since
+    /// two viewers of different heights would otherwise fight over one static --
+    /// which is exactly the multi-view case REve is built for.
+    ///
     /// CSS pixels -> the units the vertex buffer is built in, for SCREEN (and
     /// MIXED) mode. In those modes the vertex shader computes
     ///     screen = offset + vec2(VPos.x / aspect, VPos.y)
@@ -58,7 +78,11 @@ export class ZText extends Mesh {
         this._mode = args.mode !== undefined ? args.mode : TEXT2D_SPACE_SCREEN;
         /// Corner-grip resizing; moving is governed by `pickable`.
         this.resizable = args.resizable !== undefined ? args.resizable : true;
+        this._alignH = args.alignH !== undefined ? args.alignH : ZText.ALIGN_H.ORIGIN;
+        this._alignV = args.alignV !== undefined ? args.alignV : ZText.ALIGN_V.ORIGIN;
         this._grip_size = 0; // set when the geometry is laid out
+        /// Per-object CSS-pixel scale; the owning viewer keeps it current.
+        this._pxToScreen = ZText.PX_TO_SCREEN_SPACE;
         this._fontHinting = args.fontHinting !== undefined ? args.fontHinting : 1.0;
         this._color = args.color !== undefined ? args.color : [0.0,0.0,0.0];
         this._font = args.font !== undefined ? args.font : null;
@@ -110,6 +134,33 @@ export class ZText extends Mesh {
     }
     set visible(vis) {
         super.visible = vis;
+    }
+
+    //--------------------------------------------------------------------------
+    // Overlay interaction interface. GlViewerRCore drives move and resize
+    // through these rather than through ZText's own fields, so anything that
+    // implements them -- a logo sprite, say -- is draggable on the same code.
+    //--------------------------------------------------------------------------
+    ovlGetPos()      { return [this._xPos, this._yPos]; }
+    ovlSetPos(x, y)  { this.setOffset([x, y]); }
+    ovlGetSize()     { return this._fontSize; }
+    ovlSetSize(s)    { this.fontSize = s; }
+
+    /// Tell the object how big a CSS pixel is in its viewport, and rebuild if it
+    /// changed. Returns true if the geometry was rebuilt.
+    setPixelScale(pxToScreen, vpW, vpH) {
+        if (Math.abs(pxToScreen - this._pxToScreen) < 1e-9) return false;
+        this._pxToScreen = pxToScreen;
+        if (this.geometry) { this.recalcGeometry(); return true; }
+        return false;
+    }
+
+    /// Which point of the box the position refers to; see ALIGN_H / ALIGN_V.
+    setAlign(alignH, alignV) {
+        if (alignH === this._alignH && alignV === this._alignV) return;
+        this._alignH = alignH;
+        this._alignV = alignV;
+        if (this.geometry) this.recalcGeometry();
     }
 
     set text(text) {
@@ -362,6 +413,7 @@ export class ZText extends Mesh {
             }
             let l = x - extra, r = x_max + extra;
             let t = y + extra, b =  cpos[1] - font_metrics.line_height + font_metrics.gap_height - extra;
+            this._box_l = l; this._box_r = r; this._box_t = t; this._box_b = b;
             let vp = fill_rect(verts, 0, l + frame, r - frame, t - frame, b + frame);
             if (this.line_alpha !== 0.0) {
                 vp = fill_rect(verts, vp, l, r, t, t - frame);
@@ -384,9 +436,9 @@ export class ZText extends Mesh {
                 // need -- and should not get -- a bigger grab handle.
                 let one_line_h = 2*extra + font_metrics.line_height - font_metrics.gap_height;
                 let sq  = Math.max(ZText.RESIZE_GRIP_FRAC * Math.min(r - l, one_line_h),
-                                   ZText.GRIP_MIN_PX * ZText.PX_TO_SCREEN_SPACE);
+                                   ZText.GRIP_MIN_PX * this._pxToScreen);
                 let lw  = Math.max(ZText.GRIP_LINE_FRAC * (frame > 0 ? frame : 0.02 * (t - b)),
-                                   ZText.GRIP_LINE_MIN_PX * ZText.PX_TO_SCREEN_SPACE);
+                                   ZText.GRIP_LINE_MIN_PX * this._pxToScreen);
                 let gap = Math.max(lw, ZText.GRIP_GAP_FRAC * sq);
                 let gr = r - frame - gap, gb = b + frame + gap;
                 fill_rect(verts, 60, gr - sq,      gr,          gb + sq, gb + sq - lw); // top
@@ -395,6 +447,28 @@ export class ZText extends Mesh {
                 // the sensitive area is exactly the square that is drawn.
                 this._grip_size = sq + gap;
             }
+        }
+
+        // Anchor: translate the whole block -- frame, grip and glyphs alike -- so
+        // that the requested point of the box lands on the origin, which is where
+        // the `offset` uniform puts it. Doing it here rather than in the shader
+        // means per-label anchoring is free if several labels are ever laid out
+        // into one buffer, and getScreenRect() stays correct because the frame
+        // quad moves with everything else.
+        {
+            let dx = 0, dy = 0;
+            switch (this._alignH) {
+                case ZText.ALIGN_H.LEFT:   dx = -this._box_l;                      break;
+                case ZText.ALIGN_H.CENTER: dx = -0.5 * (this._box_l + this._box_r); break;
+                case ZText.ALIGN_H.RIGHT:  dx = -this._box_r;                      break;
+            }
+            switch (this._alignV) {
+                case ZText.ALIGN_V.TOP:    dy = -this._box_t;                      break;
+                case ZText.ALIGN_V.MIDDLE: dy = -0.5 * (this._box_t + this._box_b); break;
+                case ZText.ALIGN_V.BOTTOM: dy = -this._box_b;                      break;
+            }
+            if (dx !== 0 || dy !== 0)
+                for (let i = 0; i < verts.length; i += 2) { verts[i] += dx; verts[i+1] += dy; }
         }
 
         const geometry = new Geometry();
@@ -503,5 +577,240 @@ export class ZText extends Mesh {
             gl.drawArrays(this.renderingPrimitive, ZText.HDR_VERTS,
                           this.geometry.vertices.count() - ZText.HDR_VERTS);
         }
+    }
+}
+
+
+//------------------------------------------------------------------------------
+// ZTextAxis
+//------------------------------------------------------------------------------
+
+/**
+ * Scales and tick labels for a 2D projected view, the client half of REve's
+ * REveProjectionAxis.
+ *
+ * The server sends ticks in PROJECTED coordinates, deliberately over-provided:
+ * a wider range and finer subdivision than any one view needs. The non-trivial
+ * part -- original space to projected space -- has already happened there. What
+ * is left here is projected to screen, which for an orthographic camera is
+ * affine, so this can be recomputed locally on every zoom and pan without ever
+ * asking the server for anything.
+ *
+ * Everything lands in a single vertex buffer: tick marks as quads (exactly as
+ * ZText already draws its frame) followed by the glyphs of every label, for all
+ * four edges. That is possible only because anchoring is baked in at layout time
+ * rather than being a uniform -- each label carries its own alignment.
+ */
+export class ZTextAxis extends ZText {
+    /// Tick length and label gap, as fractions of the viewport height.
+    static TICK_MAJOR = 0.018;
+    static TICK_MINOR = 0.009;
+    static LABEL_GAP  = 0.006;
+
+    constructor(args = {}) {
+        super(args);
+        this.type = "ZTextAxis";
+
+        // Decoration, not GUI: no dragging, no resize grip, no hover.
+        this.pickable  = false;
+        this.resizable = false;
+        this.draw_frame = false;
+
+        this._ticks   = { H: args.ticksH || null, V: args.ticksV || null };
+        this._axesMode = args.axesMode !== undefined ? args.axesMode : 2; // kAll
+        this._camBounds = null;   // projected-space bounds this layout was built for
+        this._nTickVerts = 0;
+    }
+
+    setTicks(ticksH, ticksV, axesMode) {
+        this._ticks = { H: ticksH, V: ticksV };
+        if (axesMode !== undefined) this._axesMode = axesMode;
+        this._camBounds = null;           // force a rebuild
+    }
+
+    /**
+     * Lay out for the given orthographic camera bounds, in projected
+     * coordinates. Returns true if anything was rebuilt, so the caller can skip
+     * a redraw when the camera has not actually moved.
+     */
+    updateForCamera(left, right, bottom, top, aspect) {
+        const b = this._camBounds;
+        const same = b && Math.abs(b.l - left) < 1e-6 && Math.abs(b.r - right) < 1e-6 &&
+                          Math.abs(b.b - bottom) < 1e-6 && Math.abs(b.t - top) < 1e-6 &&
+                          Math.abs(b.a - aspect) < 1e-6;
+        if (same) return false;
+
+        this._camBounds = { l: left, r: right, b: bottom, t: top, a: aspect };
+        if (this._font && this._fontTexture) this.recalcGeometry();
+        return true;
+    }
+
+    /// Width of a single-line string in text units, without laying it out.
+    _measure(txt, font, scale) {
+        let w = 0, prev = " ";
+        for (let i = 0; i < txt.length; ++i) {
+            const c = txt.charAt(i);
+            if (c === " ") { w += font.space_advance * scale; prev = " "; continue; }
+            const fc = font.chars[c] || font.chars["?"];
+            if (!fc) continue;
+            const kern = font.kern[prev + c] || 0.0;
+            w += font.aspect * scale * (fc.advance_x + kern);
+            prev = c;
+        }
+        return w;
+    }
+
+    recalcGeometry() {
+        if (!this._font || !this._camBounds) { this.geometry = undefined; return; }
+
+        const font = this._font;
+        const fm   = ZText._fontMetrics(font, this._fontSize, 0.0);
+        const cb   = this._camBounds;
+        const asp  = cb.a;
+
+        // Projected coordinate -> (0,1) screen fraction. Affine, because the
+        // camera is orthographic; this is the whole reason the client can do it.
+        const sx = p => (p - cb.l) / (cb.r - cb.l);
+        const sy = p => (p - cb.b) / (cb.t - cb.b);
+
+        const TKMAJ = ZTextAxis.TICK_MAJOR, TKMIN = ZTextAxis.TICK_MINOR;
+        const GAP   = ZTextAxis.LABEL_GAP;
+        const doH = (this._axesMode === 0 || this._axesMode === 2);
+        const doV = (this._axesMode === 1 || this._axesMode === 2);
+
+        // ---- pass 1: decide what is visible and what fits ------------------
+        const ticks = [];   // {x0,y0,x1,y1} quads, in screen fractions
+        const labels = [];  // {text, x, y, alignH, alignV}
+
+        const addAxis = (set, horizontal) => {
+            if (!set || !set.pos) return;
+            let lastEnd = -1e9;
+            for (let i = 0; i < set.pos.length; ++i) {
+                const major = set.maj ? !!set.maj[i] : true;
+                const f = horizontal ? sx(set.pos[i]) : sy(set.pos[i]);
+                if (f < 0.0 || f > 1.0) continue;          // outside the frustum
+
+                const len = major ? TKMAJ : TKMIN;
+                const lw  = (major ? 1.6 : 1.0) * this._pxToScreen;
+                if (horizontal) {
+                    const hw = 0.5 * lw / asp;
+                    ticks.push({ x0: f - hw, x1: f + hw, y0: 0.0,       y1: len });
+                    ticks.push({ x0: f - hw, x1: f + hw, y0: 1.0 - len, y1: 1.0 });
+                } else {
+                    const hh = 0.5 * lw;
+                    ticks.push({ x0: 0.0,       x1: len, y0: f - hh, y1: f + hh });
+                    ticks.push({ x0: 1.0 - len, x1: 1.0, y0: f - hh, y1: f + hh });
+                }
+
+                const txt = major && set.lab ? set.lab[i] : "";
+                if (!txt) continue;
+
+                if (horizontal) {
+                    // Drop a label that would touch the previous one. TEve does
+                    // the same in TEveProjectionAxesGL::FilterOverlappingLabels.
+                    const w = this._measure(txt, font, fm.cap_scale) / asp;
+                    if (f - 0.5 * w < lastEnd) continue;
+                    lastEnd = f + 0.5 * w + 0.4 * this._fontSize / asp;
+                    labels.push({ text: txt, x: f, y: TKMAJ + GAP,
+                                  ah: ZText.ALIGN_H.CENTER, av: ZText.ALIGN_V.BOTTOM });
+                    labels.push({ text: txt, x: f, y: 1.0 - TKMAJ - GAP,
+                                  ah: ZText.ALIGN_H.CENTER, av: ZText.ALIGN_V.TOP });
+                } else {
+                    const h = fm.line_height;
+                    if (f - 0.5 * h < lastEnd) continue;
+                    lastEnd = f + 0.5 * h + 0.3 * h;
+                    labels.push({ text: txt, x: TKMAJ + GAP, y: f,
+                                  ah: ZText.ALIGN_H.LEFT,  av: ZText.ALIGN_V.MIDDLE });
+                    labels.push({ text: txt, x: 1.0 - TKMAJ - GAP, y: f,
+                                  ah: ZText.ALIGN_H.RIGHT, av: ZText.ALIGN_V.MIDDLE });
+                }
+            }
+        };
+        if (doH) addAxis(this._ticks.H, true);
+        if (doV) addAxis(this._ticks.V, false);
+
+        // ---- pass 2: one buffer, ticks then glyphs -------------------------
+        let nGlyph = 0;
+        for (const L of labels)
+            for (let i = 0; i < L.text.length; ++i)
+                if (L.text.charAt(i) !== " ") ++nGlyph;
+
+        const nTickV = ticks.length * 6;
+        const verts = new Float32Array(2 * nTickV + 12 * nGlyph);
+        const uvs   = new Float32Array(2 * nTickV + 12 * nGlyph);
+        this._nTickVerts = nTickV;
+
+        const rect = (arr, vi, l, r, t, b) => {
+            arr[vi++] = l; arr[vi++] = t;  arr[vi++] = l; arr[vi++] = b;
+            arr[vi++] = r; arr[vi++] = t;  arr[vi++] = r; arr[vi++] = t;
+            arr[vi++] = l; arr[vi++] = b;  arr[vi++] = r; arr[vi++] = b;
+            return vi;
+        };
+
+        // Geometry is in screen-space units, where x is divided by the aspect in
+        // the vertex shader -- so undo that here to get true screen fractions.
+        let vi = 0;
+        for (const t of ticks) vi = rect(verts, vi, t.x0 * asp, t.x1 * asp, t.y1, t.y0);
+
+        let ui = 2 * nTickV;
+        for (const L of labels) {
+            const w = this._measure(L.text, font, fm.cap_scale);
+            let ox = 0, oy = 0;
+            if (L.ah === ZText.ALIGN_H.CENTER) ox = -0.5 * w;
+            else if (L.ah === ZText.ALIGN_H.RIGHT) ox = -w;
+            if (L.av === ZText.ALIGN_V.MIDDLE) oy = 0.5 * fm.ascent;
+            else if (L.av === ZText.ALIGN_V.BOTTOM) oy = fm.ascent;
+
+            let pen = L.x * asp + ox;
+            const baseY = L.y + oy - fm.ascent;
+            let prev = " ";
+            for (let i = 0; i < L.text.length; ++i) {
+                const c = L.text.charAt(i);
+                if (c === " ") { pen += font.space_advance * fm.cap_scale; prev = " "; continue; }
+                const fc = font.chars[c] || font.chars["?"];
+                if (!fc) continue;
+                const kern = font.kern[prev + c] || 0.0;
+                const g = fc.rect;
+                const bot = baseY - fm.cap_scale * (font.descent + font.iy);
+                const top = bot + fm.cap_scale * font.row_height;
+                const lft = pen + font.aspect * fm.cap_scale * (fc.bearing_x + kern - font.ix);
+                const rgt = lft + font.aspect * fm.cap_scale * (g[2] - g[0]);
+                vi = rect(verts, vi, lft, rgt, top, bot);
+                ui = rect(uvs,   ui, g[0], g[2], 1 - g[1], 1 - g[3]);
+                pen += font.aspect * fm.cap_scale * fc.advance_x;
+                prev = c;
+            }
+        }
+
+        const geometry = new Geometry();
+        geometry.vertices = new BufferAttribute(verts, 2);
+        geometry.uv = new BufferAttribute(uvs, 2);
+        this.geometry = geometry;
+
+        this.material.setUniform("scale", fm.cap_scale);
+        this.material.setUniform("sdf_oo_N_pix_in_char", font.iy / font.cap_height);
+        this.material.setUniform("sdf_text_size", this._fontSize);
+        this.material.setUniform("offset", [0.0, 0.0]);   // positions are absolute
+        this.syncPickingUniforms();
+    }
+
+    draw(gl, glManager) {
+        if (!this.geometry) return;
+        const us = glManager._currentProgram.uniformSetter;
+        const on = us["u_use_fixed_color"], col = us["u_fixed_color"];
+        const nT = this._nTickVerts;
+
+        if (!on || !col) {   // picking or outline pass: nothing to contribute
+            return;
+        }
+        if (nT > 0) {
+            on.set(1);
+            col.set([this.line_color.r, this.line_color.g, this.line_color.b, 1.0]);
+            gl.depthMask(false);
+            gl.drawArrays(this.renderingPrimitive, 0, nT);
+            on.set(0);
+        }
+        const nG = this.geometry.vertices.count() - nT;
+        if (nG > 0) gl.drawArrays(this.renderingPrimitive, nT, nG);
     }
 }

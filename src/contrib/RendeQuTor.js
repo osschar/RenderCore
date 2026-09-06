@@ -637,6 +637,37 @@ export class RendeQuTor
         this.queue.pushRenderPass(this.RP_ToScreen);
     }
 
+    //--------------------------------------------------------------------------
+    // A note on the overlay, and on what it would take to put GUI in the scene.
+    //
+    // The overlay is drawn by its own orthographic camera over a fixed (0,0)-(1,1)
+    // box, into its own depth buffer, so its contents are always in front of the
+    // scene rather than depth-testing against it. It also has its own picking
+    // queue (PRP_overlay) and the viewer handles its events separately and first
+    // -- hover, drag and resize are resolved against overlay elements before the
+    // scene ever sees the mouse. That separation is the point: overlay elements
+    // behave like GUI, not like geometry.
+    //
+    // What the overlay cannot currently express is a GUI element anchored in the
+    // *scene* -- a callout on a detector element, a measurement annotation, a
+    // leader line -- because its camera knows nothing about world coordinates.
+    //
+    // Note this is NOT the same as "world-anchored text", which already works:
+    // TEXT2D_SPACE_MIXED anchors at a world position and holds a constant pixel
+    // size, which is what the viewer axis labels use. The difference is the
+    // overlay semantics -- always in front, own depth, own event handling. A
+    // MIXED element living in the main scene still disappears behind geometry.
+    //
+    // If that is wanted, the change is small: this pass takes {scene, camera}
+    // from its preprocess function, so a second overlay pass differing only in
+    // the camera (the scene camera instead of ovlcamera) is close to a copy, with
+    // a companion to REveScene::SetIsOverlay saying which camera a scene belongs
+    // to. It is most obviously useful in 3D; doing it there makes it free in 2D.
+    // Deliberately not done yet -- 2D projected views need only the screen-space
+    // overlay, because with an orthographic camera the projected -> screen map is
+    // affine and the client already owns it.
+    //--------------------------------------------------------------------------
+
     // Same tone mapping as RP_ToneMapToScreen, but rendered into an 8-bit texture
     // with the background NOT composited in and straight alpha preserved. This is
     // the image to grab: everything the operator sees except the background, so it
