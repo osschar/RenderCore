@@ -757,13 +757,25 @@ export class RendeQuTor
     /// mode: "knee" (default), "exposure" (the old curve), "linear" (clamp only).
     set_tone_mapping(mode_name)
     {
-        let mode = ({ knee: 3.0, exposure: 1.0, linear: 2.0 })[mode_name];
-        if (mode === undefined) {
+        // Accepts a name or the shader's numeric MODE, so a value streamed from
+        // the server can be passed straight through.
+        let mode = (typeof mode_name === "number")
+                 ? mode_name
+                 : ({ reinhard: 0.0, exposure: 1.0, linear: 2.0, knee: 3.0 })[mode_name];
+        if (mode === undefined || !(mode >= 0.0 && mode <= 3.0)) {
             console.warn("RendeQuTor.set_tone_mapping: unknown mode", mode_name, "-- using knee");
             mode = 3.0;
         }
         if (this.RP_ToneMapToScreen_mat)  this.RP_ToneMapToScreen_mat.setUniform("MODE", mode);
         if (this.RP_ToneMapToTexture_mat) this.RP_ToneMapToTexture_mat.setUniform("MODE", mode);
+    }
+
+    /// Knee position for the knee curve: colours below it pass through exactly.
+    set_tone_knee(k)
+    {
+        k = Math.min(Math.max(k, 0.0), 0.99);
+        if (this.RP_ToneMapToScreen_mat)  this.RP_ToneMapToScreen_mat.setUniform("knee", k);
+        if (this.RP_ToneMapToTexture_mat) this.RP_ToneMapToTexture_mat.setUniform("knee", k);
     }
 
     /// Set the grab resolution as a multiple of the screen viewport and re-run
