@@ -84,6 +84,15 @@ export class ZLogo extends ZSprite {
     /// Resize grip, matching ZText: fraction of the shorter side, floored in CSS px.
     static RESIZE_GRIP_FRAC = 0.05;
     static GRIP_MIN_PX = 28;
+    /// ...but never more than this fraction of the logo either. The floor above
+    /// is what a finger or a careless mouse needs, and on a small logo it wins
+    /// outright and the grip swallows the whole image -- which both hides the
+    /// logo and makes "move" unreachable, since every pixel then resizes.
+    static GRIP_MAX_FRAC = 0.40;
+    /// Smallest logo, in CSS pixels. Without a floor a resize drag can take the
+    /// logo to sub-pixel size, at which point it is invisible and there is
+    /// nothing left to grab to get it back.
+    static MIN_SIZE_PX = 24;
     /// Frame and grip arms share one line width -- the frame is there to close
     /// the grip square's other two sides, so a different width would show.
     static GRIP_LINE_PX = 2.0;
@@ -93,7 +102,8 @@ export class ZLogo extends ZSprite {
     static FRAME_COLOR = [0.30, 0.30, 0.30, 0.85];
 
     constructor(args = {}) {
-        const size = args.size !== undefined ? args.size : 64;   // CSS pixels
+        const size = Math.max(args.size !== undefined ? args.size : 64,
+                              ZLogo.MIN_SIZE_PX);                 // CSS pixels
 
         // Emissive must be white: the fragment shader forms the base colour as
         // ambient + emissive and then multiplies the texture into it, so the
@@ -171,7 +181,12 @@ export class ZLogo extends ZSprite {
     /// get a stretched handle.
     _gripMetricsCss() {
         const h = this._size, w = this._size * this._aspect_wh;
-        const sq  = Math.max(ZLogo.RESIZE_GRIP_FRAC * Math.min(w, h), ZLogo.GRIP_MIN_PX);
+        const shorter = Math.min(w, h);
+        // Floor for grabbability, then a ceiling so the grip cannot outgrow the
+        // thing it belongs to. The ceiling has to come second: on a small logo
+        // the floor would otherwise cover the whole image.
+        const sq  = Math.min(Math.max(ZLogo.RESIZE_GRIP_FRAC * shorter, ZLogo.GRIP_MIN_PX),
+                             ZLogo.GRIP_MAX_FRAC * shorter);
         const lw  = ZLogo.GRIP_LINE_PX;
         const gap = Math.max(lw, ZLogo.GRIP_GAP_FRAC * sq);
         return { sq, lw, gap };
@@ -203,7 +218,7 @@ export class ZLogo extends ZSprite {
     ovlSetPos(x, y) { this._xPos = x; this._yPos = y; this.position.set(x, y, 0.0);
                       this.updateMatrix(); }   // see the note in the constructor
     ovlGetSize()    { return this._size; }
-    ovlSetSize(s)   { this._size = s; this._applySize(); }
+    ovlSetSize(s)   { this._size = Math.max(s, ZLogo.MIN_SIZE_PX); this._applySize(); }
 
     /// The sprite is centred on its position; size is CSS pixels, so the height
     /// in screen fractions is size * pxToScreen and the width follows the image
