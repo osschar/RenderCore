@@ -33,6 +33,8 @@ import {Mesh} from './Mesh.js';
 import {Quad} from './Quad.js';
 import {ZSpriteBasicMaterial} from '../materials/ZSpriteBasicMaterial.js';
 import {Vector2} from '../RenderCore.js';
+import {Color} from '../math/Color.js';
+import {SPRITE_SPACE_SCREEN} from '../constants.js';
 
 
 export class ZSprite extends Mesh {
@@ -58,4 +60,120 @@ export class ZSprite extends Mesh {
         super(geometry, material, pmat, omat);
         this.type = "ZSprite";
     }
+}
+
+
+//------------------------------------------------------------------------------
+// ZLogo
+//------------------------------------------------------------------------------
+
+/**
+ * A screen-space image for the overlay -- an experiment logo, a watermark.
+ *
+ * A ZSprite is already the right shape for this: a camera-facing unit quad whose
+ * size is given in pixels in SPRITE_SPACE_SCREEN, textured, with zero-alpha
+ * fragments discarded so the outline comes from the image rather than the quad.
+ * Placed in the overlay scene it is positioned by the overlay's orthographic
+ * camera, so `position` is simply a (0,1) screen fraction.
+ *
+ * It implements the same small interaction interface as ZText -- ovlGetPos,
+ * ovlSetPos, ovlGetSize, ovlSetSize, getScreenRect, setHighlight -- so the
+ * viewer's existing move and corner-resize handling drives it unchanged.
+ */
+export class ZLogo extends ZSprite {
+    /// Resize grip, matching ZText: fraction of the shorter side, floored in CSS px.
+    static RESIZE_GRIP_FRAC = 0.05;
+    static GRIP_MIN_PX = 28;
+
+    constructor(args = {}) {
+        const size = args.size !== undefined ? args.size : 64;   // CSS pixels
+
+        // Emissive must be white: the fragment shader forms the base colour as
+        // ambient + emissive and then multiplies the texture into it, so the
+        // ZSpriteBasicMaterial default of black would keep only the image's
+        // alpha and draw the logo as a flat silhouette.
+        const mat = new ZSpriteBasicMaterial({ SpriteMode: SPRITE_SPACE_SCREEN,
+                                               SpriteSize: [size, size],
+                                               emissive: new Color(0xffffff) });
+        mat.transparent = true;
+        super(null, mat);
+
+        this.type = "ZLogo";
+        this._size  = size;
+        this._xPos  = args.x !== undefined ? args.x : 0.06;
+        this._yPos  = args.y !== undefined ? args.y : 0.92;
+        this._aspect_wh = 1.0;            // image aspect, set once the texture loads
+
+        // CSS pixel scale and viewport, pushed by the owning viewer.
+        this._pxToScreen = 1.0 / 900.0;
+        this._vpH = 900;
+
+        this.resizable = args.resizable !== undefined ? args.resizable : true;
+        this.pickable  = args.pickable  !== undefined ? args.pickable  : true;
+
+        // Dimmed until hovered: a logo is a watermark, not a control.
+        this._baseOpacity = args.opacity !== undefined ? args.opacity : 0.80;
+        this._highlight = false;
+        this.material.opacity = this._baseOpacity;
+
+        // EveScene turns matrixAutoUpdate off for every element it builds, so the
+        // matrix has to be refreshed by hand or the object silently stays at the
+        // origin -- which for the overlay camera is the bottom-left corner.
+        this.position.set(this._xPos, this._yPos, 0.0);
+        this.updateMatrix();
+        this._applySize();
+    }
+
+    setLogoTexture(texture, imgW, imgH) {
+        this.material.clearMaps();
+        this.material.addMap(texture);
+        if (imgW > 0 && imgH > 0) this._aspect_wh = imgW / imgH;
+        this._applySize();
+    }
+
+    /// SpriteSize is in device pixels; _size is CSS pixels, so scale by the
+    /// device-pixel ratio, which is pxToScreen * viewportHeight.
+    _applySize() {
+        const pr = Math.max(this._pxToScreen * this._vpH, 1e-6);
+        const h = this._size * pr;
+        this.material.setUniform("SpriteSize", [h * this._aspect_wh, h]);
+    }
+
+    setPixelScale(pxToScreen, vpW, vpH) {
+        let changed = false;
+        if (Math.abs(pxToScreen - this._pxToScreen) > 1e-9) { this._pxToScreen = pxToScreen; changed = true; }
+        if (vpH && vpH !== this._vpH) { this._vpH = vpH; changed = true; }
+        if (changed) this._applySize();
+        return changed;
+    }
+
+    // ---- overlay interaction interface ------------------------------------
+    ovlGetPos()     { return [this._xPos, this._yPos]; }
+    ovlSetPos(x, y) { this._xPos = x; this._yPos = y; this.position.set(x, y, 0.0);
+                      this.updateMatrix(); }   // see the note in the constructor
+    ovlGetSize()    { return this._size; }
+    ovlSetSize(s)   { this._size = s; this._applySize(); }
+
+    /// The sprite is centred on its position; size is CSS pixels, so the height
+    /// in screen fractions is size * pxToScreen and the width follows the image
+    /// aspect, divided by the viewport aspect to land in x fractions.
+    getScreenRect(aspect) {
+        const hy = 0.5 * this._size * this._pxToScreen;
+        const hx = hy * this._aspect_wh / aspect;
+
+        const sq_css = Math.max(ZLogo.RESIZE_GRIP_FRAC * 2.0 * Math.min(hy, hx * aspect) / this._pxToScreen,
+                                ZLogo.GRIP_MIN_PX);
+        const gy = sq_css * this._pxToScreen;
+
+        return { x0: this._xPos - hx, x1: this._xPos + hx,
+                 y0: this._yPos - hy, y1: this._yPos + hy,
+                 grip_x: gy / aspect, grip_y: gy };
+    }
+
+    setHighlight(on) {
+        if (this._highlight === on) return;
+        this._highlight = on;
+        this.material.opacity = on ? 1.0 : this._baseOpacity;
+    }
+    get highlight() { return this._highlight; }
 }
