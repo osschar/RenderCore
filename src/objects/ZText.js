@@ -689,6 +689,20 @@ export class ZTextAxis extends ZText {
         const ticks = [];   // {x0,y0,x1,y1} quads, in screen fractions
         const labels = [];  // {text, x, y, alignH, alignV}
 
+        // Strip along the left and right edges that the vertical labels occupy.
+        // A horizontal label whose box reaches into it would be drawn straight
+        // on top of a vertical one, which is what the corners of a projected
+        // view used to look like: two numbers superimposed and neither legible.
+        // Reserved from the widest vertical label, since they are laid out at a
+        // fixed distance from the edge and only their width varies.
+        let vReserve = 0;
+        if (doV && this._ticks.V && this._ticks.V.lab) {
+            let mw = 0;
+            for (const t of this._ticks.V.lab)
+                if (t) mw = Math.max(mw, this._measure(t, font, fm.cap_scale));
+            vReserve = TKMAJ + GAP + mw / asp;
+        }
+
         const addAxis = (set, horizontal) => {
             if (!set || !set.pos) return;
             let lastEnd = -1e9;
@@ -716,6 +730,9 @@ export class ZTextAxis extends ZText {
                     // Drop a label that would touch the previous one. TEve does
                     // the same in TEveProjectionAxesGL::FilterOverlappingLabels.
                     const w = this._measure(txt, font, fm.cap_scale) / asp;
+                    // Corner: the tick still gets drawn, only the number is
+                    // dropped -- the vertical scale already labels that corner.
+                    if (f - 0.5 * w < vReserve || f + 0.5 * w > 1.0 - vReserve) continue;
                     if (f - 0.5 * w < lastEnd) continue;
                     lastEnd = f + 0.5 * w + 0.4 * this._fontSize / asp;
                     labels.push({ text: txt, x: f, y: TKMAJ + GAP,
