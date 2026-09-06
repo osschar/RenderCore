@@ -26,6 +26,12 @@ export class ZText extends Mesh {
     static GRIP_MIN_PX = 28;
     /// Smallest interactive font size, in CSS pixels.
     static MIN_FONT_SIZE_PX = 7;
+    /// Floor for the frame's line width, in CSS pixels. The width is a fraction
+    /// of the line height, so it shrinks with the text and eventually falls
+    /// below a pixel, where the frame's quads rasterise to nothing -- edge by
+    /// edge rather than all at once, so a box loses its top rule first and looks
+    /// broken rather than merely small.
+    static MIN_FRAME_LINE_PX = 0.5;
     /// Grip line thickness, as a fraction of the frame line width...
     static GRIP_LINE_FRAC = 0.25;
     /// ...floored at this many CSS pixels. A quarter of a thin frame is
@@ -202,6 +208,14 @@ export class ZText extends Mesh {
     set fontSize(fontSize) {
         this._fontSize = fontSize;
         this.recalcGeometry();
+    }
+
+    /// Recolour in place: glyphs take `text`, ticks and frame take `line`.
+    /// Needed because the viewer's foreground colour can change after the object
+    /// is built -- flipping to a black background is the obvious case.
+    setColors(text_color, line_color) {
+        if (text_color) { this._color = text_color; this.material.color = text_color; }
+        if (line_color) { this.line_color = line_color; }
     }
 
     /// Synthetic bold: 0 is the font as authored, positive is heavier.
@@ -431,6 +445,8 @@ export class ZText extends Mesh {
                 }
                 extra *= font_metrics.line_height;
                 frame *= font_metrics.line_height;
+                if (this.line_alpha !== 0.0)
+                    frame = Math.max(frame, ZText.MIN_FRAME_LINE_PX * this._pxToScreen);
             }
             let l = x - extra, r = x_max + extra;
             let t = y + extra, b =  cpos[1] - font_metrics.line_height + font_metrics.gap_height - extra;
@@ -717,6 +733,16 @@ export class ZTextAxis extends ZText {
             vReserve = TKMAJ + GAP + mw / asp;
         }
 
+        // ...and the reciprocal strip along the top and bottom, occupied by the
+        // horizontal labels. Without this a vertical label near an end lands on
+        // the horizontal row instead, which is the same corner collision seen
+        // from the other side -- and the one that shows up first once distortion
+        // pushes a round number right to the edge.
+        let hReserve = 0;
+        if (doH && this._ticks.H && this._ticks.H.lab)
+            hReserve = TKMAJ + GAP + fm.line_height;
+
+
         const addAxis = (set, horizontal) => {
             if (!set || !set.pos) return;
             let lastEnd = -1e9;
@@ -755,6 +781,9 @@ export class ZTextAxis extends ZText {
                                   ah: ZText.ALIGN_H.CENTER, av: ZText.ALIGN_V.TOP });
                 } else {
                     const h = fm.line_height;
+                    // Corner: the tick stays, the number goes -- the horizontal
+                    // scale already labels that end.
+                    if (f - 0.5 * h < hReserve || f + 0.5 * h > 1.0 - hReserve) continue;
                     if (f - 0.5 * h < lastEnd) continue;
                     lastEnd = f + 0.5 * h + 0.3 * h;
                     labels.push({ text: txt, x: TKMAJ + GAP, y: f,
