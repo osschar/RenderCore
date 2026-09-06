@@ -383,6 +383,39 @@ export class Renderer {
 		this._renderQueue = renderQueue;
 		this._screenshotTextureReference = texture;
 	}
+	/**
+	 * Read a whole colour texture back into a Uint8Array as RGBA8.
+	 *
+	 * Unlike _takeFullScreenshot() this does NOT flip the image and does not
+	 * leak the temporary framebuffer, so the result is raw WebGL orientation
+	 * (bottom-left origin) ready to hand to an encoder that flips itself.
+	 * The texture must be an 8-bit RGBA render target: readPixels of
+	 * RGBA/UNSIGNED_BYTE from a half-float attachment is not permitted.
+	 */
+	readTexturePixels(texture, out = undefined) {
+		const width = texture.width, height = texture.height;
+		const pixels = (out && out.length === width * height * 4)
+			? out : new Uint8Array(width * height * 4);
+
+		const fb = this._gl.createFramebuffer();
+		this._gl.bindFramebuffer(this._gl.FRAMEBUFFER, fb);
+		const glTexture = this._glManager._textureManager.getGLTexture(texture);
+		this._gl.framebufferTexture2D(this._gl.FRAMEBUFFER, this._gl.COLOR_ATTACHMENT0,
+		                              this._gl.TEXTURE_2D, glTexture, 0);
+
+		const ok = this._gl.checkFramebufferStatus(this._gl.FRAMEBUFFER) === this._gl.FRAMEBUFFER_COMPLETE;
+		if (ok) {
+			this._gl.readBuffer(this._gl.COLOR_ATTACHMENT0);
+			this._gl.readPixels(0, 0, width, height, this._gl.RGBA, this._gl.UNSIGNED_BYTE, pixels);
+		} else {
+			console.error("Renderer.readTexturePixels: incomplete framebuffer for", texture);
+		}
+
+		this._gl.bindFramebuffer(this._gl.FRAMEBUFFER, null);
+		this._gl.deleteFramebuffer(fb);
+
+		return ok ? { width, height, pixels } : null;
+	}
 	pickRGB(texture = undefined, pickX, pickY, renderQueue = undefined){
 		const width = (texture)? texture.width : this.getViewport().width;
 		const height = (texture)? texture.height : this.getViewport().height;

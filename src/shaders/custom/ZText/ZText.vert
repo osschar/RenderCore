@@ -1,5 +1,5 @@
 #version 300 es
-precision mediump float;
+precision highp float;
 
 //DEF
 //**********************************************************************************************************************
@@ -23,8 +23,7 @@ uniform mat4 MVPMat;
 uniform float aspect;
 uniform vec2 viewport;
 uniform float MODE;
-uniform vec2 offset;
-// uniform vec2 FinalOffset;
+uniform vec2 offset;   // screen position of the text box, in (0,1) coordinates
 
 // SDF Uniforms
 uniform float sdf_text_size;
@@ -47,11 +46,6 @@ void main()
 
     if (MODE == TEXT2D_SPACE_SCREEN)
     {
-        // vec2 VPosNew = VPos + FinalOffset;
-        // if(offset.x != 0.0 && offset.y != 0.0)
-        // {
-        //     VPosNew = VPosNew + offset;
-        // }
         vec2 VPosNew = vec2(offset.x + VPos.x/aspect, offset.y + VPos.y);
         //map [0, 1][0, 1] to [-1, 1][-1, 1]
         vec2 VPos_clipspace = 2.0 * VPosNew - vec2(1.0);
@@ -59,7 +53,7 @@ void main()
         // Vertex position in clip space
         gl_Position = vec4(VPos_clipspace, 0.0, 1.0);
 
-        sdf_size = 2.0 * viewport.y * sdf_text_size * sdf_oo_N_pix_in_char / scale;
+        sdf_size = 2.0 * viewport.y * sdf_text_size * sdf_oo_N_pix_in_char;
     }
     else if (MODE == TEXT2D_SPACE_WORLD)
     {
@@ -71,9 +65,16 @@ void main()
         vec4 p2 = MVPMat * vec4(VPos.x, VPos.y + 0.1 * sdf_text_size, 0.0, 1.0);
         gl_Position = p1;
 
-        // WTH? Factor should be 5 (10 / 2 --> from clip to NDC size)! * 1 / scale ???
-        sdf_size = 2.0 * viewport.y * 5.0 * length(vec2(p1.x - p2.x, p1.y - p2.y)) * sdf_oo_N_pix_in_char / scale;
-        // sdf_size = 2.0 * 100.0 * length(vec2(p1.x - p2.x, p1.y - p2.y)) * sdf_oo_N_pix_in_char;
+        // The probe p2 is offset by 0.1 * sdf_text_size in object space, so the
+        // factor is 2 (full sdf value range) * 0.5 * viewport.y (NDC -> pixels)
+        // / 0.1 (probe length) = 10. The probe has to be measured in NDC, i.e.
+        // after the perspective divide; using clip-space deltas made this wrong
+        // by a factor of w -- distance-dependent under perspective, and a
+        // constant collapse under ortho, where w == 1.
+        float w1 = abs(p1.w) < 1e-6 ? 1e-6 : p1.w;
+        float w2 = abs(p2.w) < 1e-6 ? 1e-6 : p2.w;
+        vec2 dndc = p2.xy / w2 - p1.xy / w1;
+        sdf_size = 10.0 * viewport.y * length(dndc) * sdf_oo_N_pix_in_char;
     }
     else if (MODE == TEXT2D_SPACE_MIXED)
     {
@@ -86,7 +87,7 @@ void main()
         gl_Position = vec4(VPos_clip, orig_clip.z, orig_clip.w);
         // gl_Position = vec4(orig.x + VPos_clip.x, orig.y + VPos_clip.y, orig.z, 1.0);
 
-        sdf_size = 2.0 * viewport.y * sdf_text_size * sdf_oo_N_pix_in_char / scale;
+        sdf_size = 2.0 * viewport.y * sdf_text_size * sdf_oo_N_pix_in_char;
     }
 
     #if (TEXTURE)
@@ -94,7 +95,7 @@ void main()
     fragUV = uv;
     // float sdf_size = 2.0 * scale * sdf_border_size;
     // Distance field delta in screen pixels
-    doffset = 1.0 / sdf_size;
+    doffset = 1.0 / max(sdf_size, 1e-4);
     ivec2 ts = textureSize(material.texture0, 0);
     sdf_texel = vec2(1.0 / float(ts.x), 1.0 / float(ts.y));
     #fi
@@ -104,4 +105,4 @@ void main()
 // - SCREEN - what should be z_clip? Set as offset.z?
 // - WORLD - should take into account w_clip to calculate sdf_size?
 // - WORLD - Why doesn't this work with ortho
-// - Get rid of FinalOffset, here and in ZText.js
+// - FinalOffset is gone; `offset` is the position (done).

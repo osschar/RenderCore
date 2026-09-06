@@ -7,6 +7,46 @@ import {TEXT2D_SPACE_WORLD, TEXT2D_SPACE_SCREEN, TEXT2D_SPACE_MIXED} from "../co
 
 //ZText API
 export class ZText extends Mesh {
+    /// Vertices reserved before the glyphs; see the map in setText2D().
+    static HDR_VERTS = 42;
+    //--------------------------------------------------------------------------
+    // Resize-grip tunables. The grip is a small square in the bottom-right
+    // corner, drawn on hover, which starts a resize instead of a move. Its size
+    // is exported through getScreenRect() so the viewer hit-tests exactly the
+    // square that is drawn -- change these and both follow.
+    //--------------------------------------------------------------------------
+
+    /// Grip side, as a fraction of min(box width, ONE line height). Deliberately
+    /// one line: a multi-line note has no bigger text, so it needs no bigger grip.
+    static RESIZE_GRIP_FRAC = 0.05;
+    /// ...but never smaller than this many CSS pixels. On a one-line label the
+    /// fraction alone is a few pixels, which under-advertises a target that is
+    /// comfortably grabbable. At this size the grip overlaps the glyphs, which is
+    /// fine -- it is drawn only while hovered.
+    static GRIP_MIN_PX = 28;
+    /// Grip line thickness, as a fraction of the frame line width...
+    static GRIP_LINE_FRAC = 0.25;
+    /// ...floored at this many CSS pixels. A quarter of a thin frame is
+    /// sub-pixel, and the short arm of the L vanishes while the long one
+    /// survives as a hairline, so the grip stops reading as a square.
+    static GRIP_LINE_MIN_PX = 1.5;
+    /// Clearance between grip and frame: the larger of the grip line width and
+    /// this fraction of the grip square.
+    static GRIP_GAP_FRAC = 0.10;
+
+    /// CSS pixels -> the units the vertex buffer is built in, for SCREEN (and
+    /// MIXED) mode. In those modes the vertex shader computes
+    ///     screen = offset + vec2(VPos.x / aspect, VPos.y)
+    /// so VPos.y is directly a fraction of viewport height and VPos.x is divided
+    /// by the aspect ratio -- which makes the two axes isotropic in pixels, both
+    /// scaled by the viewport height. Hence one CSS pixel is
+    /// pixelRatio / canvas.height, which the viewer keeps up to date.
+    ///
+    /// Only meaningful in screen space: in TEXT2D_SPACE_WORLD the vertex units
+    /// are object space and a pixel size cannot be expressed at all, which is
+    /// why the resize grip is a screen-mode affordance only.
+    static PX_TO_SCREEN_SPACE = 1.0 / 900.0;
+
     constructor(args = {}) {
         super();
         this.type = "ZText";
@@ -16,12 +56,12 @@ export class ZText extends Mesh {
         this._xPos = args.xPos !== undefined ? (args.xPos) : 1.0;
         this._yPos = args.yPos !== undefined ? (args.yPos) : 0;
         this._mode = args.mode !== undefined ? args.mode : TEXT2D_SPACE_SCREEN;
-        this._fontHinting = 1.0;
+        /// Corner-grip resizing; moving is governed by `pickable`.
+        this.resizable = args.resizable !== undefined ? args.resizable : true;
+        this._grip_size = 0; // set when the geometry is laid out
+        this._fontHinting = args.fontHinting !== undefined ? args.fontHinting : 1.0;
         this._color = args.color !== undefined ? args.color : [0.0,0.0,0.0];
         this._font = args.font !== undefined ? args.font : null;
-
-        this._finalOffsetX = 0;
-        this._finalOffsetY = 0;
 
         this._fontSize = args.fontSize !== undefined ? args.fontSize : 1;
 
@@ -36,9 +76,15 @@ export class ZText extends Mesh {
         this.material.setUniform("u_use_fixed_color", 0);
         this.material.setUniform("u_fixed_color", [0.0, 0.0, 0.0, 0.0]);
 
-        // this.material.setUniform("FinalOffset", [0,0]);
 
         this.material.color = args.color;
+
+        // ZText places itself in the vertex shader from `offset`, the viewport
+        // aspect and MODE. The generic TRIANGLES picker that Mesh installs on
+        // first use of `pickable` knows none of that, so it puts the pick quad at
+        // the object origin and picking silently misses in SCREEN and MIXED modes.
+        // Compile this very program into its picking variant instead.
+        this.pickingMaterial = this.material.clone_for_picking();
 
         this._text = args.text !== undefined ? args.text : "Default text";
         if (this._fontTexture != null && this._font != null) {
@@ -55,6 +101,7 @@ export class ZText extends Mesh {
         this.material.setUniform("scale", font_metrics.cap_scale);
         this.material.setUniform("sdf_oo_N_pix_in_char", this._font.iy / this._font.cap_height);
         this.material.setUniform("sdf_text_size", this._fontSize);
+        this.syncPickingUniforms();
     }
 
     // Override visibility to avoid rendering of uninitialized objects.
@@ -108,18 +155,79 @@ export class ZText extends Mesh {
         this.fill_alpha = fill_alpha;
         this.line_color = line_color;
         this.line_alpha = line_alpha;
+        // TGLOverlayButton keeps a normal and a highlight alpha; same idea here.
+        this._norm_fill_alpha = fill_alpha;
+        this._norm_line_alpha = line_alpha;
+        this._highlight = false;
         this.extra_border = extra_border;
         this.line_width = line_width;
     }
 
-    setOffset(offset) {
-        this.material.setUniform("offset", offset);
+    /// Mouse-over feedback: pull the plate towards opaque and light up the
+    /// resize-grip mark, so an interactive annotation announces itself. Kept just
+    /// short of 1.0 so draw() does not flip depth-writing on a hover.
+    setHighlight(on) {
+        if (this._highlight === on) return;
+        this._highlight = on;
+        if (on) {
+            this.fill_alpha = Math.min(0.98, this._norm_fill_alpha + 0.30);
+            this.line_alpha = Math.min(0.98, this._norm_line_alpha + 0.30);
+        } else {
+            this.fill_alpha = this._norm_fill_alpha;
+            this.line_alpha = this._norm_line_alpha;
+        }
     }
 
-    setNewPositionOffset(x, y) {
-        this._finalOffsetX = this._finalOffsetX + x;
-        this._finalOffsetY = this._finalOffsetY + y;
-        this.material.setUniform("FinalOffset", [this._finalOffsetX, this._finalOffsetY]);
+    get highlight() { return this._highlight; }
+
+    /// The offset uniform IS the screen position of the text box, in (0,1)
+    /// screen coordinates. Keep xPos/yPos in step so callers can read it back.
+    setOffset(offset) {
+        this._xPos = offset[0];
+        this._yPos = offset[1];
+        this.material.setUniform("offset", offset);
+        this.syncPickingUniforms();
+    }
+
+    /// Keep the placement uniforms of the picking material in step with the
+    /// drawing material. Only the ones that move the quad matter; `aspect` is set
+    /// by the renderer on both.
+    syncPickingUniforms() {
+        if (!this._pickingMaterial) return;
+        // Only the uniforms that place the quad; the rest do not affect picking.
+        this._pickingMaterial.setUniform("MODE", this._mode);
+        this._pickingMaterial.setUniform("offset", [this._xPos, this._yPos]);
+        this._pickingMaterial.setUniform("scale", this.material.getUniform("scale"));
+        this._pickingMaterial.setUniform("sdf_text_size", this.material.getUniform("sdf_text_size"));
+    }
+
+    /// Bounding rectangle of the laid-out text box in (0,1) screen coordinates.
+    ///
+    /// Returns null in TEXT2D_SPACE_WORLD: there the element is placed by the
+    /// model matrix rather than by `offset`, so this rectangle would be
+    /// meaningless. Callers use it for overlay hit-testing, which is screen-mode
+    /// only anyway.
+    ///
+    /// setText2D() always fills the first six vertices with the enclosing quad,
+    /// frame or no frame, so those are the box. x is divided by the viewport
+    /// aspect in the vertex shader, so undo that here to get screen units.
+    getScreenRect(aspect) {
+        if (this._mode === TEXT2D_SPACE_WORLD) return null;
+        if (!this.geometry || !this.geometry.vertices) return null;
+        const v = this.geometry.vertices.array;
+        let x0 =  Infinity, y0 =  Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (let i = 0; i < 12; i += 2) {
+            if (v[i]   < x0) x0 = v[i];
+            if (v[i]   > x1) x1 = v[i];
+            if (v[i+1] < y0) y0 = v[i+1];
+            if (v[i+1] > y1) y1 = v[i+1];
+        }
+        return { x0: this._xPos + x0 / aspect, x1: this._xPos + x1 / aspect,
+                 y0: this._yPos + y0,          y1: this._yPos + y1,
+                 // Resize-grip square, in the same screen fractions. Geometry
+                 // units are isotropic in pixels, so x needs the aspect divide.
+                 grip_x: (this._grip_size || 0) / aspect,
+                 grip_y: (this._grip_size || 0) };
     }
 
     setTextureAndFont(texture, font) {
@@ -141,10 +249,15 @@ export class ZText extends Mesh {
             if (schar != " " && schar != "\n")
                 ++char_count;
         }
-        const verts = new Float32Array(60 + 12*char_count);
-        const uvs   = new Float32Array(60 + 12*char_count);
-        let vi = 60;
-        let ui = 60;
+        // Header vertex block, before the glyphs:
+        //    0 ..  5   frame fill quad (also the pick target and the bbox)
+        //    6 .. 29   four frame border quads
+        //   30 .. 41   resize-grip mark at the bottom-right corner (two quads)
+        // ZTEXT_HDR_VERTS must match the offsets used in draw().
+        const verts = new Float32Array(2*ZText.HDR_VERTS + 12*char_count);
+        const uvs   = new Float32Array(2*ZText.HDR_VERTS + 12*char_count);
+        let vi = 2*ZText.HDR_VERTS;
+        let ui = 2*ZText.HDR_VERTS;
 
         let prev_char = " ";  // Used to calculate kerning
         let cpos  = [ x, y ]; // Current pen position
@@ -256,6 +369,32 @@ export class ZText extends Mesh {
                 vp = fill_rect(verts, vp, l, r, b + frame, b);
                 vp = fill_rect(verts, vp, l, l + frame, t - frame, b + frame);
             }
+
+            // Resize grip: a small square tucked into the frame's inner corner.
+            // The frame supplies the bottom and right sides, these two arms the
+            // top and left, at half the frame's line width.
+            //
+            // Side is a fraction of the SHORTER side of the box, so it stays
+            // square rather than stretching with a wide, one-line annotation.
+            // Geometry units are isotropic in pixels here -- the vertex shader
+            // divides x by the aspect ratio -- so min() is a genuine min.
+            {
+                // Scale on ONE line, not on the whole box: a three-line note is
+                // three times as tall but its text is no bigger, so it does not
+                // need -- and should not get -- a bigger grab handle.
+                let one_line_h = 2*extra + font_metrics.line_height - font_metrics.gap_height;
+                let sq  = Math.max(ZText.RESIZE_GRIP_FRAC * Math.min(r - l, one_line_h),
+                                   ZText.GRIP_MIN_PX * ZText.PX_TO_SCREEN_SPACE);
+                let lw  = Math.max(ZText.GRIP_LINE_FRAC * (frame > 0 ? frame : 0.02 * (t - b)),
+                                   ZText.GRIP_LINE_MIN_PX * ZText.PX_TO_SCREEN_SPACE);
+                let gap = Math.max(lw, ZText.GRIP_GAP_FRAC * sq);
+                let gr = r - frame - gap, gb = b + frame + gap;
+                fill_rect(verts, 60, gr - sq,      gr,          gb + sq, gb + sq - lw); // top
+                fill_rect(verts, 72, gr - sq, gr - sq + lw,     gb + sq, gb);           // left
+                // Single source of truth: GlViewerRCore hit-tests with this, so
+                // the sensitive area is exactly the square that is drawn.
+                this._grip_size = sq + gap;
+            }
         }
 
         const geometry = new Geometry();
@@ -349,11 +488,20 @@ export class ZText extends Mesh {
                 gl.depthMask(this.line_alpha === 1.0);
                 gl.drawArrays(this.renderingPrimitive, 6, 24);
             }
+            // Resize grip: shown only while the element is highlighted, and only
+            // if it can actually be resized -- an affordance, not decoration.
+            if (this._highlight && this.pickable && this.resizable &&
+                this._mode !== TEXT2D_SPACE_WORLD && this.line_alpha !== 0.0) {
+                us_col.set([this.line_color.r, this.line_color.g, this.line_color.b, 1.0]);
+                gl.depthMask(false);
+                gl.drawArrays(this.renderingPrimitive, 30, 12);
+            }
             us_on.set(0);
         }
         if (this.opacity !== 0.0) {
             gl.depthMask(this.material.opacity === 1.0);
-            gl.drawArrays(this.renderingPrimitive, 30, this.geometry.vertices.count() - 30);
+            gl.drawArrays(this.renderingPrimitive, ZText.HDR_VERTS,
+                          this.geometry.vertices.count() - ZText.HDR_VERTS);
         }
     }
 }
