@@ -138,16 +138,14 @@ export class ZLogo extends ZSprite {
         this._highlight = false;
         this.material.opacity = this._baseOpacity;
 
-        // Two separate hazards, both about the object matrix.
-        // 1) GlViewerRCore sets Object3D.sDefaultQuaternionsAndAutoUpdate = false,
-        //    under which Object3D never creates position/quaternion/scale, so
-        //    `this.position` would be undefined here.
-        // 2) EveScene turns matrixAutoUpdate off for every element it builds, so
-        //    the matrix has to be refreshed by hand or the object silently stays
-        //    at the origin -- for the overlay camera, the bottom-left corner.
-        this.enableQuaternions();
-        this.position.set(this._xPos, this._yPos, 0.0);
-        this.updateMatrix();
+        // The sprite's anchor is its model matrix -- the vertex shader takes
+        // VPos_clipspace from MVP and adds the pixel-sized quad to it. Set the
+        // matrix directly rather than going through position/quaternion:
+        // GlViewerRCore turns Object3D.sDefaultQuaternionsAndAutoUpdate off
+        // deliberately and manages matrices itself, so those members do not even
+        // exist. matrixChanged() flags the world matrix, which the per-frame
+        // scene.updateMatrixWorld() then recomposes down the hierarchy.
+        this._applyPos();
 
         this._frameColor = args.frameColor !== undefined ? args.frameColor
                                                          : ZLogo.FRAME_COLOR;
@@ -215,8 +213,13 @@ export class ZLogo extends ZSprite {
 
     // ---- overlay interaction interface ------------------------------------
     ovlGetPos()     { return [this._xPos, this._yPos]; }
-    ovlSetPos(x, y) { this._xPos = x; this._yPos = y; this.position.set(x, y, 0.0);
-                      this.updateMatrix(); }   // see the note in the constructor
+    ovlSetPos(x, y) { this._xPos = x; this._yPos = y; this._applyPos(); }
+
+    /// Anchor as a translation in the model matrix; see the note in the constructor.
+    _applyPos() {
+        this.matrix.makeTranslation(this._xPos, this._yPos, 0.0);
+        this.matrixChanged();
+    }
     ovlGetSize()    { return this._size; }
     ovlSetSize(s)   { this._size = Math.max(s, ZLogo.MIN_SIZE_PX); this._applySize(); }
 
