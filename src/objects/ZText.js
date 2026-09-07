@@ -80,13 +80,6 @@ export class ZText extends Mesh {
         this.type = "ZText";
         this.frustumCulled = false;
 
-        // A ZText is positioned, so it needs _position to exist. GlViewerRCore
-        // sets Object3D.sDefaultQuaternionsAndAutoUpdate = false, under which the
-        // Object3D constructor skips creating position/quaternion/scale entirely
-        // and any `obj.position` access throws. Light and Camera opt back in the
-        // same way; anything else that is placed rather than parented must too.
-        this.enableQuaternions();
-
         this._fontTexture = args.fontTexture !== undefined ? args.fontTexture : null;
         this._xPos = args.xPos !== undefined ? (args.xPos) : 1.0;
         this._yPos = args.yPos !== undefined ? (args.yPos) : 0;
