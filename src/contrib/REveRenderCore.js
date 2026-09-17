@@ -142,6 +142,7 @@ export {ZShapeBasicMaterial} from '../materials/ZShapeBasicMaterial.js';
 export {ZShape} from '../objects/ZShape.js';
 export {ZTextMaterial} from '../materials/ZTextMaterial.js';
 export {ZText, ZTextAxis} from '../objects/ZText.js';
+export {Z3DAxis} from '../objects/Z3DAxis.js';
 
 // Program Management
 export {MaterialProgramTemplate} from '../program_management/MaterialProgramTemplate.js';

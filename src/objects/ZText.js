@@ -3,7 +3,7 @@ import {Geometry} from "./Geometry.js";
 import {BufferAttribute} from "../core/BufferAttribute.js";
 import {Texture} from "../textures/Texture.js";
 import {ZTextMaterial} from "../materials/ZTextMaterial.js";
-import {TEXT2D_SPACE_WORLD, TEXT2D_SPACE_SCREEN, TEXT2D_SPACE_MIXED} from "../constants.js";
+import {TEXT2D_SPACE_WORLD, TEXT2D_SPACE_SCREEN, TEXT2D_SPACE_MIXED, TEXT2D_SPACE_ANCHOR} from "../constants.js";
 
 //ZText API
 export class ZText extends Mesh {
@@ -98,10 +98,12 @@ export class ZText extends Mesh {
 
         this._fontSize = args.fontSize !== undefined ? args.fontSize : 1;
 
-        if (this._mode !== TEXT2D_SPACE_SCREEN && this._mode !== TEXT2D_SPACE_WORLD && this._mode !== TEXT2D_SPACE_MIXED)
+        if (this._mode !== TEXT2D_SPACE_SCREEN && this._mode !== TEXT2D_SPACE_WORLD &&
+            this._mode !== TEXT2D_SPACE_MIXED  && this._mode !== TEXT2D_SPACE_ANCHOR)
             console.error('[' + this.type + "]: Unknow mode [" + this._mode + ']');
 
         this.material = new ZTextMaterial();
+        if (this._mode === TEXT2D_SPACE_ANCHOR) this.material.enableAnchor3D();
         // Uniforms aspect and viewport set by MeshRenderer based on actual viewport
         this.material.setUniform("MODE", this._mode);
         this.material.setUniform("offset", [this._xPos, this._yPos]);

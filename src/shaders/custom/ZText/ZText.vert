@@ -6,6 +6,7 @@ precision highp float;
 #define TEXT2D_SPACE_WORLD 0.0
 #define TEXT2D_SPACE_SCREEN 1.0
 #define TEXT2D_SPACE_MIXED 2.0
+#define TEXT2D_SPACE_ANCHOR 3.0
 
 #if (TEXTURE)
 struct Material {
@@ -32,6 +33,23 @@ uniform float sdf_oo_N_pix_in_char;
 in vec2 VPos; // Vertex position (screenspace)
 // in float scale;
 uniform float scale;
+
+#if (ANCHOR3D)
+// Per-vertex 3D anchor: the world point this vertex hangs off. VPos is then a
+// screen-space offset from that point, exactly as in MIXED mode -- only the
+// anchor is per vertex instead of per object, which is what lets one mesh hold
+// a whole 3D axis (lines, ticks and glyphs) in a single buffer.
+in vec3 anchor;
+
+// Size attenuation. atten = 0 keeps every offset the same size in pixels no
+// matter how far the anchor is; atten = 1 shrinks it exactly like geometry;
+// in between is the readable compromise. w_ref is the clip-space w of the
+// reference point the nominal size is defined at -- under an orthographic
+// camera every w is 1, so the whole term collapses to 1 and attenuation
+// correctly does nothing.
+uniform float atten;
+uniform float w_ref;
+#fi
 
 // Output quad texture coordinates
 out vec2 fragUV;
@@ -89,6 +107,35 @@ void main()
 
         sdf_size = 2.0 * viewport.y * sdf_text_size * sdf_oo_N_pix_in_char;
     }
+#if (ANCHOR3D)
+    else if (MODE == TEXT2D_SPACE_ANCHOR)
+    {
+        vec4 a_clip = MVPMat * vec4(anchor, 1.0);
+
+        // Behind the camera: w <= 0 turns the perspective divide inside out and
+        // the offset would be mirrored across the viewport rather than clipped.
+        // Send the vertex somewhere the clipper will certainly discard.
+        if (a_clip.w <= 0.0)
+        {
+            gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+            sdf_size = 1.0;
+        }
+        else
+        {
+            vec2 a_scrn = 0.5 * (a_clip.xy / a_clip.w + vec2(1.0));
+            float s = pow(w_ref / a_clip.w, atten);
+            vec2 VPos_scrn = a_scrn + s * vec2(VPos.x / aspect, VPos.y);
+            vec2 VPos_clip = a_clip.w * (2.0 * VPos_scrn - vec2(1.0));
+            gl_Position = vec4(VPos_clip, a_clip.z, a_clip.w);
+
+            // s belongs here too: the SDF smoothing width is in glyph pixels, so
+            // an attenuated glyph that kept the unattenuated sdf_size would be
+            // antialiased for a size it is not drawn at -- soft when shrunk,
+            // hard-edged when enlarged.
+            sdf_size = 2.0 * viewport.y * sdf_text_size * s * sdf_oo_N_pix_in_char;
+        }
+    }
+#fi
 
     #if (TEXTURE)
     // Pass-through texture coordinate
