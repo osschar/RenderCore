@@ -203,4 +203,32 @@ export class Z3DAxis extends ZText {
         this.material.setUniform("offset", [0.0, 0.0]);   // anchors are absolute
         this.syncPickingUniforms();
     }
+
+    /**
+     * Draw the whole buffer.
+     *
+     * ZText::draw() must not be inherited here. It reserves the first
+     * ZText.HDR_VERTS (42) vertices for the plate, the frame and the resize
+     * grip, draws those in three separate calls, and then draws the glyphs from
+     * index HDR_VERTS onward. This class has no plate, frame or grip: its
+     * buffer is glyphs from index 0.
+     *
+     * Inheriting it therefore ate the first seven glyphs -- 42 vertices at six
+     * per quad -- which on an axis system is the whole of the first two labels
+     * and the leading character of the third. It presented as "-30 and -20 are
+     * missing from the x axis and -10 has lost its minus", with the label array
+     * and the vertex buffer both perfectly correct, so it looked for a long
+     * while like a layout or clipping problem rather than a draw-range one.
+     *
+     * ZTextAxis overrides draw() for its own reasons (ticks and glyphs in one
+     * buffer, drawn with different uniforms) and so never hit this.
+     */
+    draw(gl, glManager) {
+        if (!this.geometry) return;
+        const us = glManager._currentProgram.uniformSetter;
+        // Picking and outline variants do not declare the colour uniforms and
+        // have nothing to take from a decoration; same test ZTextAxis uses.
+        if (!us["u_use_fixed_color"] || !us["u_fixed_color"]) return;
+        gl.drawArrays(this.renderingPrimitive, 0, this.geometry.vertices.count());
+    }
 }
