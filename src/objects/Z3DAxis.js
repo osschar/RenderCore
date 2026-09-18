@@ -80,6 +80,15 @@ export class Z3DAxis extends ZText {
 
     getAttenuation() { return this._atten; }
 
+    /// Label size, as a fraction of viewport height. Unlike the attenuation
+    /// this is baked into the glyph quads, so it costs a geometry rebuild --
+    /// hence a setter that does one rather than a uniform.
+    setFontSize(sz) {
+        if (sz === this._fontSize) return;
+        this._fontSize = sz;
+        if (this._font && this._fontTexture) this.recalcGeometry();
+    }
+
     /**
      * The distance at which a label is drawn at its nominal size, as a
      * clip-space w. Everything nearer than this grows and everything further
