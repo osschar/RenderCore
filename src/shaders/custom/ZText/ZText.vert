@@ -126,7 +126,24 @@ void main()
             float s = pow(w_ref / a_clip.w, atten);
             vec2 VPos_scrn = a_scrn + s * vec2(VPos.x / aspect, VPos.y);
             vec2 VPos_clip = a_clip.w * (2.0 * VPos_scrn - vec2(1.0));
-            gl_Position = vec4(VPos_clip, a_clip.z, a_clip.w);
+
+            // Depth is CLAMPED into the frustum rather than allowed to clip.
+            //
+            // An axis annotates a scene from just outside it, so its anchors
+            // sit beyond the bounding box the near and far planes are fitted
+            // to -- and those planes are fitted tightly on purpose, to spend
+            // the whole z-buffer on the scene. Widening them to admit the
+            // labels would pay for a few text anchors with the depth precision
+            // of everything else.
+            //
+            // So a label outside the frustum is pinned just inside the nearer
+            // plane instead of vanishing. Inside the frustum the depth is
+            // exact, so it still occludes and is occluded correctly; only past
+            // the planes does it flatten, which is where the alternative was
+            // not drawing it at all. All six vertices of a glyph share the
+            // anchor's z and w, so the clamp cannot skew a quad.
+            float ndc_z = clamp(a_clip.z / a_clip.w, -0.999, 0.999);
+            gl_Position = vec4(VPos_clip, ndc_z * a_clip.w, a_clip.w);
 
             // s belongs here too: the SDF smoothing width is in glyph pixels, so
             // an attenuated glyph that kept the unattenuated sdf_size would be
