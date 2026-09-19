@@ -264,6 +264,33 @@ export class RendeQuTor
     {
         this.tex_outline = null;
 
+        // Re-arm the outline accumulator's clear HERE, at the start of the
+        // frame, not only where it is consumed.
+        //
+        // render_outline() turns the clear OFF for the second and later
+        // outlines of a frame, so they accumulate into one texture on purpose;
+        // render_main_and_blend_outline() turns it back on once it has consumed
+        // them. The flag is therefore OFF for the stretch between those two
+        // calls, and it is only ever turned back on by the second of them.
+        //
+        // So any frame that ends in that window leaves it off for good: a
+        // program still compiling, a shader that failed to build, an exception
+        // anywhere in the viewer's render path, a queue that reports itself
+        // unused. It does not matter which -- what matters is that the
+        // invariant was owned by a later step that is not guaranteed to run.
+        //
+        // Once off, no outline is ever cleared again: highlights pile up
+        // instead of replacing each other, old ones never go away, and a stale
+        // selection outline keeps showing through. Rare, because the frame has
+        // to end inside that window; permanent once it does; and invisible in
+        // the selection bookkeeping, which stays correct throughout. That
+        // combination is what made it so hard to pin down.
+        //
+        // Re-arming here makes it a frame-local invariant: one assignment, and
+        // no way for it to stick.
+        if (this.RP_Outline)
+            this.RP_Outline.outTextures[0].clearColorArray = this.clear_zero_f32arr;
+
         this.queue.render_begin(used_check);
     }
 
