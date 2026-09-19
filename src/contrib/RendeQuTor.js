@@ -606,8 +606,18 @@ export class RendeQuTor
             [ { id: "color_overlay", textureConfig: RenderPass.DEFAULT_RGBA16F_TEXTURE_CONFIG,
                 clearColorArray: this.clear_zero_f32arr } ]
         );
+        // Supersampled like the scene, NOT at native resolution.
+        //
+        // RP_SSAA_Super renders the scene at vport * SSAA_value and the blend
+        // samples it down, so the scene gets its antialiasing at composite
+        // time. The overlay used to render at vport, which meant none of that
+        // reached it: text, frames and annotation connectors were composited
+        // one-to-one and came out visibly stepped, worst on a thin diagonal.
+        // Rendering it at the same scale lets the very same downsample in
+        // RP_Blend antialias both.
         this.RP_Overlay.view_setup = function (vport) {
-             this.viewport = { width: vport.width, height: vport.height };
+             this.viewport = { width: vport.width * pthis.SSAA_value,
+                               height: vport.height * pthis.SSAA_value };
             };
 
         this.queue.pushRenderPass(this.RP_Overlay);
