@@ -40,6 +40,20 @@ export class BufferAttribute {
 		this.target = (args.target !== undefined) ? args.target : BufferAttribute.TARGET.ARRAY_BUFFER;
 		this.idleTime = 0;
 
+		// Interleaving, in BYTES, straight through to vertexAttribPointer.
+		// Both zero -- the default -- is the tightly packed case and behaves
+		// exactly as before.
+		//
+		// With them, an attribute can be a VIEW of a buffer rather than a copy
+		// of part of it: two attributes over one array, reading different
+		// fields of the same records. Stripes use it to take the two endpoints
+		// of a segment out of a plain list of positions without building
+		// anything, and count() has to be told the item count separately
+		// because it can no longer be derived from the array length.
+		this._stride = (args.stride !== undefined) ? args.stride : 0;
+		this._offset = (args.offset !== undefined) ? args.offset : 0;
+		this._count  = (args.count  !== undefined) ? args.count  : -1;
+
 
 		this._locations = new Array();
 	}
@@ -50,6 +64,7 @@ export class BufferAttribute {
 	 * @returns Item count.
 	 */
 	count() {
+		if (this._count >= 0) return this._count;
 		return this._array.length / this._itemSize;
 	}
 
@@ -118,6 +133,8 @@ export class BufferAttribute {
 	set update(update) { this._update = update; }
 
 	get divisor() { return this._divisor; }
+	get stride()  { return this._stride;  }
+	get offset()  { return this._offset;  }
 	set divisor(divisor) { this._divisor = divisor; }
 
 	get drawType() { return this._drawType; }
