@@ -1,5 +1,6 @@
 import { STRIPE_SPACE_SCREEN } from "../constants.js";
-import { Float32Attribute } from "../core/BufferAttribute.js";
+import { BufferAttribute, Float32Attribute } from "../core/BufferAttribute.js";
+import { StripesGeometry } from "../objects/StripesGeometry.js";
 import { Color } from "../math/Color.js";
 import { StripeBasicMaterial } from "./StripeBasicMaterial.js";
 
@@ -87,97 +88,52 @@ export class StripesBasicMaterial extends StripeBasicMaterial {
     }
 
 
-    // The three per-vertex attributes a stripe needs, built straight into typed
-    // arrays.
+    // The three attributes a stripe needs, none of them built.
     //
-    // A stripe expands each base vertex into two, one per side, so for a
-    // segment (A, B) the four output vertices carry
+    // One segment is one instance of a four-vertex quad, so:
     //
-    //     VPos  = A A B B          the vertex itself
-    //     prev  = A A A A          the segment's start
-    //     next  = B B B B          the segment's end
-    //     delta = (-1,+1) (-1,-1) (+1,+1) (+1,-1)
+    //   prevVertex   the segment's start   per instance, a VIEW of the caller's
+    //   nextVertex   the segment's end     positions at offsets 0 and 12, both
+    //                                      with stride 24 -- no copy at all
+    //   deltaOffset  which corner          per vertex, four values, ONE buffer
+    //                                      shared by every stripe in existence
     //
-    // delta.x says start-or-end and delta.y which side; the shader takes the
-    // screen-space perpendicular from prev and next and offsets by delta.
+    // The vertex's own position is not an attribute any more: the shader takes
+    // it as `(deltaOffset.x < 0.0) ? prevVertex : nextVertex`, which is what it
+    // always was.
     //
-    // These used to be built as plain `new Array(n)` and then handed to
-    // Float32Attribute, which copies them into a Float32Array -- so every
-    // attribute was materialised twice, once boxed. A track of a thousand
-    // points did that four times over.
-    //
-    // delta is now shared: it depends only on the vertex count, never on the
-    // positions, so every stripe object with the same number of vertices can
-    // use one buffer. An axis of three stripe objects, or a scene of a thousand
-    // equal-length tracks, allocates it once.
-    //
-    // The copies of prev and next remain, and cannot be removed here: prev is A
-    // four times, which no view of the base array can express. Doing that needs
-    // the segments drawn INSTANCED -- four vertices per instance, prev and next
-    // as divisor-1 views into the base array at offsets 0 and 12, stride 24 --
-    // which is a change to the shader and the draw as well as to this file.
-
-    static _baseArray(baseGeometry) {
-        // Indexed or not, answer with the base positions in draw order.
-        const verts = baseGeometry.vertices;
-        if ( ! baseGeometry.indices)
-            return { arr: verts.array, idx: null, n: verts.count() };
-
-        const idx = baseGeometry.indices;
-        return { arr: verts.array, idx: idx.array, n: idx.count() };
-    }
+    // This replaces four arrays built per geometry -- expanded vertices, prev,
+    // next and delta, each twice the base size and each first materialised as a
+    // boxed `new Array` before being copied into a Float32Array. A track of a
+    // thousand points built eight thousand vertices' worth of data to draw two
+    // thousand. Now it builds none.
 
     static _setupPrevVertices(baseGeometry) {
-        const { arr, idx, n } = StripesBasicMaterial._baseArray(baseGeometry);
-        const out = new Float32Array(n * 2 * 3);
-
-        for (let i = 0; i < n; ++i) {
-            // Even is a segment start and is its own prev; odd looks back one.
-            const src = 3 * (idx ? idx[(i % 2 === 0) ? i : i - 1]
-                                 : ((i % 2 === 0) ? i : i - 1));
-            const dst = i * 6;
-            out[dst    ] = out[dst + 3] = arr[src    ];
-            out[dst + 1] = out[dst + 4] = arr[src + 1];
-            out[dst + 2] = out[dst + 5] = arr[src + 2];
-        }
-        return new Float32Attribute(out, 3);
+        return StripesBasicMaterial._endpointView(baseGeometry, 0);
     }
 
     static _setupNextVertices(baseGeometry) {
-        const { arr, idx, n } = StripesBasicMaterial._baseArray(baseGeometry);
-        const out = new Float32Array(n * 2 * 3);
-
-        for (let i = 0; i < n; ++i) {
-            // Even looks forward one; odd is a segment end and is its own next.
-            const src = 3 * (idx ? idx[(i % 2 === 0) ? i + 1 : i]
-                                 : ((i % 2 === 0) ? i + 1 : i));
-            const dst = i * 6;
-            out[dst    ] = out[dst + 3] = arr[src    ];
-            out[dst + 1] = out[dst + 4] = arr[src + 1];
-            out[dst + 2] = out[dst + 5] = arr[src + 2];
-        }
-        return new Float32Attribute(out, 3);
+        return StripesBasicMaterial._endpointView(baseGeometry, 12);
     }
 
+    /// One end of every segment, as a strided view. byteOffset 0 is the start
+    /// vertex of each pair, 12 the end.
+    static _endpointView(baseGeometry, byteOffset) {
+        const arr = StripesGeometry.orderedPositions(baseGeometry);
+        const n = (arr.length / 6) | 0;   // segments
+
+        return new BufferAttribute(arr, 3, 1, { stride: 24, offset: byteOffset, count: n });
+    }
+
+    /// The four corners, shared. It says start-or-end and which side and
+    /// depends on nothing else -- not the positions, not even how many there
+    /// are, now that the quad is per instance.
     static _setupDeltaDirections(baseGeometry) {
-        const { n } = StripesBasicMaterial._baseArray(baseGeometry);
-
-        let cached = StripesBasicMaterial._deltaCache.get(n);
-        if (cached) return cached;
-
-        const out = new Float32Array(n * 2 * 2);
-        for (let i = 0; i < n; ++i) {
-            const s = (i % 2 === 0) ? -1 : +1;   // start or end of its segment
-            out[i * 4    ] = s; out[i * 4 + 1] = +1;
-            out[i * 4 + 2] = s; out[i * 4 + 3] = -1;
-        }
-
-        cached = new Float32Attribute(out, 2);
-        StripesBasicMaterial._deltaCache.set(n, cached);
-        return cached;
+        if ( ! StripesBasicMaterial._delta)
+            StripesBasicMaterial._delta =
+                Float32Attribute([-1, +1,  -1, -1,  +1, +1,  +1, -1], 2);
+        return StripesBasicMaterial._delta;
     }
 }
 
-/// Keyed by vertex count -- delta depends on nothing else. See
-/// _setupDeltaDirections().
-StripesBasicMaterial._deltaCache = new Map();
+StripesBasicMaterial._delta = null;

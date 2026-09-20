@@ -26,9 +26,15 @@ uniform float halfLineWidth;
 uniform float MODE;
 //uniform float JOIN_MODE;
 
-in vec3 VPos;       // Vertex position
+// The segment's two endpoints, per INSTANCE -- one instance is one segment,
+// four vertices. Both are views of the same position buffer, offset by one
+// vertex, so nothing is built to feed them.
 in vec3 prevVertex;
 in vec3 nextVertex;
+
+// Which of the four corners this vertex is: x is -1 at the start of the
+// segment and +1 at the end, y is the side. Per vertex, and the same four
+// values for every stripe in existence.
 in vec2 deltaOffset;
 
 #if (COLORS)
@@ -78,6 +84,12 @@ uniform float depthBias;
 //MAIN
 //**********************************************************************************************************************//
 void main() {
+    // The vertex's own position. It used to be an attribute, which meant
+    // storing every position twice over -- once as VPos, once as prev or next
+    // of the neighbouring vertex. It is just whichever end of the segment this
+    // corner belongs to.
+    vec3 VPos = (deltaOffset.x < 0.0) ? prevVertex : nextVertex;
+
     if(MODE == STRIPE_SPACE_WORLD){
         //VIEWSPACE DEFAULT
 
