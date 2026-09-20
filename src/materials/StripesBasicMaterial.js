@@ -125,20 +125,28 @@ export class StripesBasicMaterial extends StripeBasicMaterial {
         return new BufferAttribute(arr, 3, 1, { stride: 24, offset: byteOffset, count: n });
     }
 
-    /// The four corners. The VALUES depend on nothing -- not the positions, not
-    /// even how many there are, now that the quad is per instance -- but the
-    /// attribute object must still be per material, not one shared static.
+    /// The four corners of the quad, one buffer for every stripe in the
+    /// process. It says start-or-end and which side, which depends on nothing
+    /// at all -- not the positions, not even how many there are, now that the
+    /// quad is per instance.
     ///
-    /// Every viewer is its own GL context, and a BufferAttribute carries three
-    /// pieces of state that are really per context: `dirty`/`_update`, which
-    /// gate the upload, so whichever context renders first would clear them and
-    /// the others would draw from an allocated-but-never-filled buffer;
-    /// `idleTime`, which ages it; and `locations`, which deleteBuffer() walks
-    /// to call disableVertexAttribArray and then clears -- with locations that
-    /// belong to another context's programs. It is only eight floats, so
-    /// sharing it saves nothing worth that.
+    /// Sharing it is the point: a scene can hold thousands of stripe objects,
+    /// and eight floats each is not the cost -- allocating and freeing a buffer
+    /// per object is, and one buffer that every draw touches stays in cache
+    /// instead of walking thousands that do not.
+    ///
+    /// Sharing one attribute between viewers is only safe because a
+    /// BufferAttribute is pure data: the GL buffer, the version last uploaded,
+    /// the idle counter and the attrib locations all live in the per-context
+    /// entry in GLAttributeManager, so each context uploads and ages its own.
+    /// It was not always so -- see that class -- and when those lived on the
+    /// attribute this static filled only in whichever viewer rendered first.
     static _setupDeltaDirections(baseGeometry) {
-        return Float32Attribute([-1, +1,  -1, -1,  +1, +1,  +1, -1], 2);
+        if ( ! StripesBasicMaterial._delta)
+            StripesBasicMaterial._delta =
+                Float32Attribute([-1, +1,  -1, -1,  +1, +1,  +1, -1], 2);
+        return StripesBasicMaterial._delta;
     }
 }
 
+StripesBasicMaterial._delta = null;

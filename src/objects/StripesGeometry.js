@@ -75,15 +75,23 @@ export class StripesGeometry extends Geometry {
 
 	/// Two triangles over the four corners of one segment. The same six indices
 	/// for every stripe object there will ever be.
-	/// Six indices, the same six values for every stripe object there will ever
-	/// be -- but a fresh attribute each time, NOT one shared static. See the
-	/// note on the delta buffer in StripesBasicMaterial: every viewer is its own
-	/// GL context, and an attribute's dirty flag, idle counter and location list
-	/// are all per context in truth. A shared index buffer is uploaded only into
-	/// whichever context renders first; in the others it stays allocated and
-	/// empty, every index reads 0, and the view is simply blank.
+	/// Two triangles over the four corners of one segment -- the same six
+	/// values for every stripe object there will ever be, so one buffer serves
+	/// the whole process. A scene can hold thousands of stripes; the twenty-four
+	/// bytes are not what they cost, allocating and freeing a buffer each is,
+	/// and one index buffer that every draw touches stays in cache.
+	///
+	/// Safe to share between viewers only because a BufferAttribute is pure
+	/// data: the GL buffer, the uploaded version, the idle counter and the
+	/// attrib locations all live in the per-context entry in
+	/// GLAttributeManager. When they lived on the attribute this static was
+	/// uploaded into whichever context rendered first and every other view drew
+	/// every index as 0, which is to say drew nothing.
 	static quadIndices() {
-		return Uint32Attribute([0, 1, 2, 3, 2, 1], 1);
+		if ( ! StripesGeometry._quadIdx)
+			StripesGeometry._quadIdx = Uint32Attribute([0, 1, 2, 3, 2, 1], 1);
+		return StripesGeometry._quadIdx;
 	}
 }
 
+StripesGeometry._quadIdx = null;
