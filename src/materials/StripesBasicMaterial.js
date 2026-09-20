@@ -125,15 +125,20 @@ export class StripesBasicMaterial extends StripeBasicMaterial {
         return new BufferAttribute(arr, 3, 1, { stride: 24, offset: byteOffset, count: n });
     }
 
-    /// The four corners, shared. It says start-or-end and which side and
-    /// depends on nothing else -- not the positions, not even how many there
-    /// are, now that the quad is per instance.
+    /// The four corners. The VALUES depend on nothing -- not the positions, not
+    /// even how many there are, now that the quad is per instance -- but the
+    /// attribute object must still be per material, not one shared static.
+    ///
+    /// Every viewer is its own GL context, and a BufferAttribute carries three
+    /// pieces of state that are really per context: `dirty`/`_update`, which
+    /// gate the upload, so whichever context renders first would clear them and
+    /// the others would draw from an allocated-but-never-filled buffer;
+    /// `idleTime`, which ages it; and `locations`, which deleteBuffer() walks
+    /// to call disableVertexAttribArray and then clears -- with locations that
+    /// belong to another context's programs. It is only eight floats, so
+    /// sharing it saves nothing worth that.
     static _setupDeltaDirections(baseGeometry) {
-        if ( ! StripesBasicMaterial._delta)
-            StripesBasicMaterial._delta =
-                Float32Attribute([-1, +1,  -1, -1,  +1, +1,  +1, -1], 2);
-        return StripesBasicMaterial._delta;
+        return Float32Attribute([-1, +1,  -1, -1,  +1, +1,  +1, -1], 2);
     }
 }
 
-StripesBasicMaterial._delta = null;

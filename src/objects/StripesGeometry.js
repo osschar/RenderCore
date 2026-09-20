@@ -15,8 +15,15 @@ import { Geometry } from './Geometry.js';
 /// points that is four arrays built and thrown away per geometry.
 ///
 /// `vertices` is kept pointing at the base positions. Nothing binds it -- the
-/// shader takes its position from prevVertex and nextVertex now -- but the
+/// shaders take the position from prevVertex and nextVertex now -- but the
 /// bounding box is computed from it, and it costs nothing to leave correct.
+///
+/// That holds only while EVERY program drawing this geometry derives VPos
+/// rather than declaring it: basic_stripes_template.vert, GBuffer_stripes.vert
+/// and GBufferMini_stripes.vert. MeshRenderer binds `vertices` to VPos for any
+/// program that does declare it, and under instancing it would then read the
+/// first four positions for every segment -- which is silent, and looks like a
+/// misplaced outline rather than a wrong attribute.
 export class StripesGeometry extends Geometry {
 	constructor(args = {}) {
 		super();
@@ -68,11 +75,15 @@ export class StripesGeometry extends Geometry {
 
 	/// Two triangles over the four corners of one segment. The same six indices
 	/// for every stripe object there will ever be.
+	/// Six indices, the same six values for every stripe object there will ever
+	/// be -- but a fresh attribute each time, NOT one shared static. See the
+	/// note on the delta buffer in StripesBasicMaterial: every viewer is its own
+	/// GL context, and an attribute's dirty flag, idle counter and location list
+	/// are all per context in truth. A shared index buffer is uploaded only into
+	/// whichever context renders first; in the others it stays allocated and
+	/// empty, every index reads 0, and the view is simply blank.
 	static quadIndices() {
-		if ( ! StripesGeometry._quadIdx)
-			StripesGeometry._quadIdx = Uint32Attribute([0, 1, 2, 3, 2, 1], 1);
-		return StripesGeometry._quadIdx;
+		return Uint32Attribute([0, 1, 2, 3, 2, 1], 1);
 	}
 }
 
-StripesGeometry._quadIdx = null;
