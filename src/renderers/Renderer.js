@@ -304,6 +304,38 @@ export class Renderer {
 	// endregion
 
 	/**
+	 * GL resource recycling, in two calls that bracket a rebuild of the scene.
+	 *
+	 * A GL buffer or texture here is only a CACHE of a BufferAttribute or a
+	 * Texture, which hold the data and outlive it. Nothing registers or owns a
+	 * GL resource, and nothing has to be told that an object has gone away:
+	 *
+	 *     renderer.ageResources();     // before rebuilding: age everything held
+	 *     ... rebuild the scene ...    // every resource still in use is touched
+	 *     renderer.collectResources(); // after: drop what nobody touched
+	 *
+	 * "Still needed" is answered by whether anything reached for it while the
+	 * scene was being rebuilt, which is exactly the question an application can
+	 * answer and the renderer cannot. Dropping a resource writes nothing back to
+	 * the attribute or texture, so a later use simply uploads it again.
+	 *
+	 * An application that loads a scene once and keeps it need never call these.
+	 * One whose scene changes -- a new event, a new frame of data -- calls them
+	 * around each change and its GPU memory follows the scene on its own.
+	 *
+	 * @param idleTimeDelta cycles a resource may go untouched before it is
+	 *        dropped. 1 collects as soon as something is not used by a rebuild;
+	 *        2 gives it one cycle of grace, which is what REve uses.
+	 */
+	ageResources() {
+		this._glManager.ageResources();
+	}
+
+	collectResources(idleTimeDelta = 2) {
+		this._glManager.collectResources(idleTimeDelta);
+	}
+
+	/**
 	 * Clears cached attributes such as position arrays, indices and uv coordinates as well as cached textures.
 	 */
 	dispose() {

@@ -161,7 +161,7 @@ export class GLProgramManager {
 				if (utype == 0)
 					utype = type;
 				if(item_size <= 4){
-					buffer.locations.push(location);
+					self._glManager.addAttributeLocation(buffer, location);
 
 					self._gl.enableVertexAttribArray(location);
 					self._gl.bindBuffer(self._gl.ARRAY_BUFFER, glBuffer);
@@ -185,7 +185,7 @@ export class GLProgramManager {
 					self._gl.bindBuffer(self._gl.ARRAY_BUFFER, glBuffer);
 
 					for(let i = 0; i < item_size/4; i++){
-						buffer.locations.push(location + i);
+						self._glManager.addAttributeLocation(buffer, location + i);
 
 						self._gl.enableVertexAttribArray(location + i);
 						if (type == self._gl.FLOAT){
