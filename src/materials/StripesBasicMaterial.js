@@ -26,8 +26,39 @@ export class StripesBasicMaterial extends StripeBasicMaterial {
         this.prevVertex = (args.baseGeometry !== undefined) ? StripesBasicMaterial._setupPrevVertices(args.baseGeometry) : null;
         this.nextVertex = (args.baseGeometry !== undefined) ? StripesBasicMaterial._setupNextVertices(args.baseGeometry) : null;
         this.deltaOffset = (args.baseGeometry !== undefined) ? StripesBasicMaterial._setupDeltaDirections(args.baseGeometry) : null;
+        this.depthBias = (args.depthBias !== undefined) ? args.depthBias : 0;
     }
 
+
+    /// Constant bias towards the viewer, in NDC depth units, for a stripe that
+    /// has to win against a surface it is drawn on -- an axis panel ruling a
+    /// floor, most obviously. Negative values push away.
+    ///
+    /// Compiled in only when asked for: zero removes the flag, so a stripe that
+    /// does not want it pays nothing and gets the same program it always had.
+    /// See basic_stripes_template.vert for why polygon offset cannot do this.
+    ///
+    /// Beware it wins against EVERYTHING nearby, not only the surface it was
+    /// meant for -- a track passing just behind a biased line will be drawn over
+    /// by it. Hence off by default and set per material rather than globally.
+    get depthBias() { return this._depthBias; }
+    set depthBias(v) {
+        v = v || 0;
+        this._depthBias = v;
+
+        if (v !== 0) {
+            if (!this.hasSBFlag("DEPTH_BIAS")) {
+                this.addSBFlag("DEPTH_BIAS");
+                // The flag set changed, so the cached template no longer
+                // describes this material -- drop it and let it be rebuilt.
+                this.requiredProgramTemplate = null;
+            }
+            this.setUniform("depthBias", v);
+        } else if (this.hasSBFlag("DEPTH_BIAS")) {
+            this.rmSBFlag("DEPTH_BIAS");
+            this.requiredProgramTemplate = null;
+        }
+    }
 
     get lineWidth() { return this._lineWidth; }
     set lineWidth(lineWidth) {
