@@ -8,13 +8,30 @@ CONTRIB_DIR := ${SRC_DIR}/contrib
 VERSION := $(shell sed -n 's/.*revision *= *["]*\([0-9.]*\)["]*.*/\1/p' ${SRC_DIR}/constants.js)
 TARBALL := RenderCore-${VERSION}.tar.gz
 
+.PHONY: default dist tarball clean
+
 default:
 	@echo No default target, please specify dist or clean.
 
-dist: REveRenderCore-min.mjs shaders
+# A release is always built from scratch. The alternative is to teach make the
+# import graph that rollup follows, which is the whole source tree, and getting
+# that list wrong fails silently. It takes about four seconds.
+#
+# The tar is built reproducibly -- fixed order, zeroed mtimes and ownership, and
+# gzip -n so the compressed stream carries no timestamp either. The checksum is
+# then a function of the contents alone, so an unchanged release keeps its
+# checksum and a changed one is visible. Without this, every run produced a new
+# checksum from the file mtimes, which is how a tarball packing a stale bundle
+# passed for a new release on 2026-09-23.
+dist:
+	${MAKE} clean
+	${MAKE} tarball
+
+tarball: REveRenderCore-min.mjs shaders
 	@test -n "${VERSION}" || { echo "Could not read revision from ${SRC_DIR}/constants.js"; exit 1; }
-	tar cf RenderCore-${VERSION}.tar ../../LICENSE REveRenderCore-min.mjs shaders/
-	gzip -9f RenderCore-${VERSION}.tar
+	tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+	    -cf RenderCore-${VERSION}.tar ../../LICENSE REveRenderCore-min.mjs shaders/
+	gzip -9nf RenderCore-${VERSION}.tar
 	sha256sum -b ${TARBALL}
 	@echo Now move the tarball to ROOT source and put the checksum into ROOT source tree
 	@echo "  " mv ${TARBALL} ROOT-SRC/builtins/rendercore/
