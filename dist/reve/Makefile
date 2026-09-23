@@ -14,14 +14,14 @@ default:
 dist: REveRenderCore-min.mjs shaders
 	@test -n "${VERSION}" || { echo "Could not read revision from ${SRC_DIR}/constants.js"; exit 1; }
 	tar cf RenderCore-${VERSION}.tar ../../LICENSE REveRenderCore-min.mjs shaders/
-	gzip -9 RenderCore-${VERSION}.tar
+	gzip -9f RenderCore-${VERSION}.tar
 	sha256sum -b ${TARBALL}
 	@echo Now move the tarball to ROOT source and put the checksum into ROOT source tree
 	@echo "  " mv ${TARBALL} ROOT-SRC/builtins/rendercore/
 	@echo and remember to tag this commit in rcore:
 	@echo "  " git tag -a ${VERSION} -m \"RenderCore ${VERSION}\" \&\& git push rcore ${VERSION}
-	@echo and put the SHA256 checksum into:
-	@echo "  " ROOT-SRC/cmake/modules/SearchInstalledSoftware.cmake
+	@echo and put the file name and the SHA256 checksum into:
+	@echo "  " ROOT-SRC/builtins/rendercore/CMakeLists.txt
 
 clean:
 	rm -rf REveRenderCore.mjs REveRenderCore-min.mjs programs.json shaders RenderCore-*.tar.gz
