@@ -358,6 +358,12 @@ export class ZText extends Mesh {
             let schar = text.charAt(c);
 
             if ( schar == "\n" ) {
+                // A newline as the very last character adds no line. Pressing
+                // Enter at the end of the last line is a typing habit, and
+                // honouring it leaves an empty line inside the frame. A newline
+                // followed by anything, a space included, is kept, so a
+                // deliberate blank last line is written as "\n ".
+                if ( c == text.length - 1 ) continue;
                 if ( cpos[0] > x_max ) x_max = cpos[0]; // Expanding the bounding rect
                 cpos[0]  = x;
                 cpos[1] -= font_metrics.line_height;
